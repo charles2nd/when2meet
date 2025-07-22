@@ -2,6 +2,12 @@
 
 A React Native/Expo presentation app showcasing the When2meet concept - the ultimate solution for gaming team coordination and management.
 
+## 🎥 Demo Video
+
+https://github.com/user-attachments/assets/your-video-id-here
+
+*Full app demonstration showing all features in action*
+
 ## 🎯 Features
 
 ### 📅 Meet Tab - Team Calendar
