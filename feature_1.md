@@ -1,47 +1,27 @@
-this is my clients Idea, make a one pager for a presentation about his idea and present the core concepts
+🕒 Fonctionnalité "Quand se rencontrer" (type When2Meet)
+Objectif : Trouver le meilleur moment pour une réunion, une pratique ou un match avec plusieurs membres d'une équipe.
 
-When2meet ( dimanche a samedi)
+🔧 Fonctionnement simplifié
+Création d’événement rapide : Nom de l’événement, dates (fixes ou jours de la semaine), plage horaire souhaitée.
 
-Calendrier
--game day
--prac day
--congé
--scrim
--tournois
--check in
+Interface glisser-déposer : Sélection ou désélection des plages de disponibilité.
 
-Creer groupe (team)
--profil dequipe Personnalisé
--liens
--historique
+Vue en temps réel :
 
-Chat de discussions
--photo
--video
--notifs
--reactions
--sondage
+Disponibilités individuelles à gauche
 
-Fichier
-Video
-Trier pars joueurs
+Disponibilités du groupe à droite (mise à jour instantanée)
 
-Syko team table
+Connexion simplifiée : Nom + mot de passe facultatif
 
-Link avec esea faceit steam. Cs stats
+Lien unique pour partager l'événement à l’équipe (par lien direct, email ou messagerie)
 
-News du jeux : patch note, tourney etc
+Codes couleurs pour visualiser les créneaux avec le plus de participants disponibles.
 
-Actualité de l'équipe
-inspiration
+📊 Avantages intégrés à FreeZe
+Synchronisé avec les rôles d’équipe (Coach, IGL, etc.)
 
-le fait que je doit chercher partout pour les bon outils
-name
+Relié au calendrier d'équipe (game day, scrim, tournoi…)
 
-FreeZe
-phone
+Affichage centralisé et interactif dans l’espace de groupe
 
-4502780705
-problem
-
-Les joueurs soit éparpiller pars pleins d'app, le but c'est de centrer sur UNE app

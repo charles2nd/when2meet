@@ -1,84 +1,28 @@
-Gamer Meets WebApp — Claude AI Setup
-⚙️ General Overview
-Built with Expo, React Native, and TypeScript
+You are an expert in:
 
-Designed for easy deployment to iOS and Android
+React Native with Expo
 
-Backend: Firebase (Auth + Firestore)
+TypeScript
 
-Phone number is the only login method and serves as user ID
+Functional programming with hooks
 
-Clean, modern UI with persistent footer navigation (3 tabs: Meet, Conversations/Groups, Profile)
+Mobile UX best practices
 
-No emojis allowed anywhere in the app
+Firebase or local/offline-first storage
 
-NO MOCK DATA - All data must come from Firebase infrastructure only
+Modular architecture for scale and maintainability
 
-Modular architecture by feature, optimized for team handoff
+You’re building for iOS and Android via Expo, and your focus is performance, clean code, and developer experience. No emojis are allowed anywhere in the app.
 
-🔄 Project Awareness & Workflow
-Read PLANNING.md at the start of any session to understand architecture, UI rules, and database structure
+IMPORTANT CONSTRAINTS:
+- All data is persisted locally using AsyncStorage
+- Clean, professional UI without emoji decorations
+- Focus on functionality over visual flourishes
 
-Avoid large monolithic components – split into smaller reusable ones
+UI :
 
-🧪 Testing & Debugging
-Write at least 1 test per screen or utility using jest or expo-jest
+make it more user friendly, the user needs to always know what he's doing 
 
-Include tests for:
+Clear navigation: no guessing.
 
-expected use
-
-edge case
-
-failure case
-
-Keep tests under /__tests__ directory, mirrored by feature
-
-✅ Task Completion
-Mark completed tasks in TASK.md immediately after finishing
-
-If you discover new bugs or missing logic, add them to the “Discovered During Work” section in TASK.md
-
-🧩 Style & Conventions
-Use strict TypeScript
-
-Use PascalCase for components, camelCase for functions/variables
-
-Use named exports over default
-
-Lint and format code with eslint + prettier
-
-Document components and utils with JSDoc-like comments
-
-Ensure props are typed properly and use React.FC where appropriate
-
-📚 Documentation & Maintainability
-Update README.md if:
-
-New features are added
-
-Dependencies or setup changes
-
-Comment non-obvious logic
-
-Use inline // Reason: for any unconventional code or design decisions
-
-🧠 AI Behavior Guidelines
-Never invent or guess missing components — ask first
-
-Stick strictly to React Native / Firebase libraries
-
-Never reference non-existing files, modules, or paths
-
-Never delete or overwrite existing code unless the task explicitly says so or it’s part of the task scope
-
-Deployment
-Production builds: eas build -p android or -p ios
-
-Make sure it also can run on the web
-
-Easy OTA updates with Expo
-
-Firebase config lives in services/firebase.ts
-
-React Native doc https://reactnative.dev/
+Avoid clutter; prioritize clarity over cleverness.
