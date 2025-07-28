@@ -1,298 +1,625 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useMockData } from '../contexts/MockDataContext';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, StatusBar } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { FirebaseStorageService } from '../services/FirebaseStorageService';
+import { getWebStyle } from '../utils/webStyles';
+import { Team } from '../models/Team';
+import { TeamMember } from '../models/TeamMember';
+import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
+import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 
 const ProfileScreen: React.FC = () => {
-  const { currentUser, currentTeam, availabilityResponses, availabilityEvents } = useMockData();
-  
-  const getRoleColor = (role: string) => {
-    const colors: Record<string, string> = {
-      'Coach': '#ef4444',
-      'IGL': '#8b5cf6', 
-      'Player': '#3b82f6',
-      'Sub': '#10b981',
-    };
-    return colors[role] || '#6b7280';
+  const [currentUser, setCurrentUser] = useState<TeamMember | null>(null);
+  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const router = useRouter();
+  const { language, setLanguage, t } = useLanguage();
+  const { user, signOut, isAdmin } = useAuth();
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const teamResult = await FirebaseStorageService.getCurrentTeam();
+      const userIdResult = await FirebaseStorageService.getCurrentUserId();
+      
+      if (teamResult.success && teamResult.data && userIdResult.success && userIdResult.data) {
+        const team = teamResult.data;
+        setCurrentTeam(team);
+        
+        const userMember = team.members.find(m => m.id === userIdResult.data);
+        if (userMember) {
+          setCurrentUser(userMember);
+        }
+      }
+    } catch (error) {
+      Alert.alert(t.common.error, 'Failed to load profile data');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const userResponses = currentUser 
-    ? availabilityResponses.filter(r => r.userId === currentUser.id)
-    : [];
-  
-  const totalAvailabilityEvents = availabilityEvents.length;
-  const userParticipatedEvents = userResponses.length;
-  const totalSlotsSelected = userResponses.reduce((total, response) => 
-    total + response.selectedSlots.length, 0
-  );
+  const handleLanguageChange = async (lang: 'en' | 'fr') => {
+    await setLanguage(lang);
+  };
 
-  if (!currentUser) {
+  const handleSignOut = () => {
+    Alert.alert(
+      'EXTRACT FROM MISSION',
+      'Confirm extraction from tactical operations?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Extract', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut();
+              console.log('[PROFILE] Logout completed');
+            } catch (error) {
+              console.error('[PROFILE] Error during logout:', error);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleLeaveTeam = () => {
+    Alert.alert(
+      'ABANDON SQUAD',
+      'Are you sure you want to leave your current squad?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Leave Squad', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await FirebaseStorageService.setCurrentTeamId('');
+              router.replace('/find-group');
+            } catch (error) {
+              Alert.alert('Mission Failed', 'Unable to leave squad. Try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleShareTeamCode = () => {
+    if (currentTeam) {
+      Alert.alert(
+        'SQUAD CODE',
+        `Share this code with new recruits:\n\n${currentTeam.code}\n\nSquad: ${currentTeam.name}`,
+        [{ text: 'Copy Code', onPress: () => {} }]
+      );
+    }
+  };
+
+  if (loading) {
     return (
-      <View style={styles.container}>
-        <View style={styles.emptyContent}>
-          <Text style={styles.emptyText}>No user profile found</Text>
-        </View>
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading operator profile...</Text>
+      </View>
+    );
+  }
+
+  if (!currentUser || !currentTeam) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>No active operator profile found</Text>
+        <TouchableOpacity 
+          style={[styles.button, getWebStyle('touchableOpacity')]}
+          onPress={() => router.replace('/find-group')}
+        >
+          <Text style={styles.buttonText}>Find Squad</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Profile</Text>
-        <Text style={styles.subtitle}>Your gaming profile and stats</Text>
-      </View>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.tactical.dark} />
       
-      <View style={styles.content}>
-        {/* User Info Card */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatarSection}>
-            <View style={[styles.avatar, { backgroundColor: getRoleColor(currentUser.role) }]}>
-              <Text style={styles.avatarText}>
-                {currentUser.username.charAt(0).toUpperCase()}
-              </Text>
-            </View>
+      {/* CS2-style header */}
+      <LinearGradient
+        colors={[Colors.primary, Colors.primaryDark]}
+        style={styles.header}
+      >
+        <View style={styles.headerContent}>
+          <View style={styles.operatorInfo}>
+            <Text style={styles.headerTitle}>OPERATOR PROFILE</Text>
+            <Text style={styles.headerSubtitle}>Tactical personnel data</Text>
           </View>
           
-          <View style={styles.userInfo}>
-            <Text style={styles.username}>{currentUser.username}</Text>
-            <Text style={[
-              styles.userRole,
-              { color: getRoleColor(currentUser.role) }
-            ]}>
-              {currentUser.role}
-            </Text>
-            {currentUser.email && (
-              <Text style={styles.userEmail}>{currentUser.email}</Text>
-            )}
-            {currentTeam && (
-              <Text style={styles.teamName}>Team: {currentTeam.name}</Text>
-            )}
-          </View>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => setShowSettings(!showSettings)}
+          >
+            <Ionicons 
+              name={showSettings ? "close" : "settings"} 
+              size={24} 
+              color={Colors.text.primary} 
+            />
+          </TouchableOpacity>
         </View>
+      </LinearGradient>
 
-        {/* Statistics Card */}
-        <View style={styles.statsCard}>
-          <Text style={styles.sectionTitle}>Activity Statistics</Text>
-          
-          <View style={styles.statRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{userParticipatedEvents}</Text>
-              <Text style={styles.statLabel}>Events Joined</Text>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {!showSettings ? (
+          <>
+            {/* Operator Profile */}
+            <View style={styles.profilePanel}>
+              <View style={styles.operatorAvatar}>
+                <Text style={styles.avatarText}>{currentUser.getInitials()}</Text>
+              </View>
+              <View style={styles.operatorDetails}>
+                <Text style={styles.operatorName}>{currentUser.name}</Text>
+                <Text style={styles.operatorEmail}>{currentUser.email}</Text>
+                <View style={styles.badgeContainer}>
+                  {currentUser.isAdmin() && (
+                    <View style={styles.adminBadge}>
+                      <Ionicons name="shield-checkmark" size={12} color={Colors.text.inverse} />
+                      <Text style={styles.adminText}>COMMANDER</Text>
+                    </View>
+                  )}
+                  <View style={styles.statusBadge}>
+                    <View style={styles.statusDot} />
+                    <Text style={styles.statusText}>ACTIVE</Text>
+                  </View>
+                </View>
+              </View>
             </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{totalAvailabilityEvents}</Text>
-              <Text style={styles.statLabel}>Total Events</Text>
-            </View>
-          </View>
-          
-          <View style={styles.statRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{totalSlotsSelected}</Text>
-              <Text style={styles.statLabel}>Time Slots Selected</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>
-                {userParticipatedEvents > 0 
-                  ? Math.round((userParticipatedEvents / totalAvailabilityEvents) * 100)
-                  : 0}%
-              </Text>
-              <Text style={styles.statLabel}>Participation Rate</Text>
-            </View>
-          </View>
-        </View>
 
-        {/* Recent Activity */}
-        <View style={styles.activityCard}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          {userResponses.length === 0 ? (
-            <Text style={styles.emptyActivityText}>No recent activity</Text>
-          ) : (
-            userResponses.slice(0, 5).map((response) => {
-              const event = availabilityEvents.find(e => e.id === response.eventId);
-              if (!event) return null;
+            {/* Squad Information */}
+            <View style={styles.squadPanel}>
+              <View style={styles.panelHeader}>
+                <Ionicons name="people" size={20} color={Colors.secondary} />
+                <Text style={styles.panelTitle}>SQUAD INTEL</Text>
+              </View>
               
-              return (
-                <View key={response.eventId} style={styles.activityItem}>
-                  <View>
-                    <Text style={styles.activityEventTitle}>{event.title}</Text>
-                    <Text style={styles.activityDate}>
-                      Updated: {response.lastUpdated.toLocaleDateString()}
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Squad Name:</Text>
+                <Text style={styles.infoValue}>{currentTeam.name}</Text>
+              </View>
+              
+              {currentTeam.description && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Mission:</Text>
+                  <Text style={styles.infoValue}>{currentTeam.description}</Text>
+                </View>
+              )}
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Squad Code:</Text>
+                <Text style={styles.infoValue}>{currentTeam.code}</Text>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Members:</Text>
+                <Text style={styles.infoValue}>{currentTeam.getMemberCount()}</Text>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Deployed:</Text>
+                <Text style={styles.infoValue}>
+                  {new Date(currentUser.joinedAt).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                </Text>
+              </View>
+            </View>
+
+            {/* Actions */}
+            <View style={styles.actionsPanel}>
+              <TouchableOpacity 
+                style={[styles.actionButton, getWebStyle('touchableOpacity')]}
+                onPress={handleShareTeamCode}
+              >
+                <LinearGradient
+                  colors={[Colors.secondary, Colors.secondaryDark]}
+                  style={styles.actionGradient}
+                >
+                  <Ionicons name="share" size={20} color={Colors.text.primary} />
+                  <Text style={styles.actionText}>SHARE SQUAD CODE</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.actionButton, getWebStyle('touchableOpacity')]}
+                onPress={handleLeaveTeam}
+              >
+                <LinearGradient
+                  colors={[Colors.error, '#D32F2F']}
+                  style={styles.actionGradient}
+                >
+                  <Ionicons name="exit" size={20} color={Colors.text.primary} />
+                  <Text style={styles.actionText}>ABANDON SQUAD</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <>
+            {/* Settings Panel */}
+            <View style={styles.settingsPanel}>
+              <View style={styles.panelHeader}>
+                <Ionicons name="language" size={20} color={Colors.secondary} />
+                <Text style={styles.panelTitle}>LANGUAGE PROTOCOL</Text>
+              </View>
+              
+              <TouchableOpacity
+                style={[
+                  styles.languageOption,
+                  language === 'en' && styles.selectedOption,
+                  getWebStyle('touchableOpacity')
+                ]}
+                onPress={() => handleLanguageChange('en')}
+              >
+                <View style={styles.optionContent}>
+                  <View style={styles.optionLeft}>
+                    <Text style={styles.flagEmoji}>US</Text>
+                    <Text style={[styles.optionText, language === 'en' && styles.selectedText]}>
+                      ENGLISH
                     </Text>
                   </View>
-                  <Text style={styles.activitySlots}>
-                    {response.selectedSlots.length} slots
-                  </Text>
+                  {language === 'en' && (
+                    <Ionicons name="radio-button-on" size={20} color={Colors.accent} />
+                  )}
+                  {language !== 'en' && (
+                    <Ionicons name="radio-button-off" size={20} color={Colors.text.tertiary} />
+                  )}
                 </View>
-              );
-            })
-          )}
-        </View>
-      </View>
-    </ScrollView>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.languageOption,
+                  language === 'fr' && styles.selectedOption,
+                  getWebStyle('touchableOpacity')
+                ]}
+                onPress={() => handleLanguageChange('fr')}
+              >
+                <View style={styles.optionContent}>
+                  <View style={styles.optionLeft}>
+                    <Text style={styles.flagEmoji}>FR</Text>
+                    <Text style={[styles.optionText, language === 'fr' && styles.selectedText]}>
+                      FRANÇAIS
+                    </Text>
+                  </View>
+                  {language === 'fr' && (
+                    <Ionicons name="radio-button-on" size={20} color={Colors.accent} />
+                  )}
+                  {language !== 'fr' && (
+                    <Ionicons name="radio-button-off" size={20} color={Colors.text.tertiary} />
+                  )}
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* System Info */}
+            <View style={styles.infoPanel}>
+              <View style={styles.panelHeader}>
+                <Ionicons name="information-circle" size={20} color={Colors.secondary} />
+                <Text style={styles.panelTitle}>SYSTEM INFO</Text>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Version:</Text>
+                <Text style={styles.infoValue}>v1.0.0</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Build:</Text>
+                <Text style={styles.infoValue}>CS2 Tactical</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Release:</Text>
+                <Text style={styles.infoValue}>2024.01</Text>
+              </View>
+            </View>
+
+            {/* Extract Button */}
+            <TouchableOpacity
+              style={[styles.actionButton, getWebStyle('touchableOpacity')]}
+              onPress={handleSignOut}
+            >
+              <LinearGradient
+                colors={[Colors.error, '#D32F2F']}
+                style={styles.actionGradient}
+              >
+                <Ionicons name="power" size={20} color={Colors.text.primary} />
+                <Text style={styles.actionText}>EXTRACT FROM MISSION</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: Colors.background,
   },
   header: {
-    backgroundColor: '#FFFFFF',
-    padding: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    paddingTop: 50,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
+  operatorInfo: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: Typography.sizes.xl,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
+    marginBottom: Spacing.xs,
+    letterSpacing: 1,
+  },
+  headerSubtitle: {
+    fontSize: Typography.sizes.md,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  settingsButton: {
+    width: 50,
+    height: 50,
+    borderRadius: BorderRadius.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: Spacing.md,
   },
   content: {
-    padding: 16,
-  },
-  emptyContent: {
     flex: 1,
+    backgroundColor: Colors.background,
+  },
+  profilePanel: {
+    backgroundColor: Colors.surface,
+    margin: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border.medium,
+    ...Shadows.lg,
+  },
+  operatorAvatar: {
+    width: 70,
+    height: 70,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#9ca3af',
-    textAlign: 'center',
-  },
-  profileCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  avatarSection: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginRight: Spacing.lg,
+    borderWidth: 3,
+    borderColor: Colors.accent,
   },
   avatarText: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontSize: Typography.sizes.xl,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
   },
-  userInfo: {
-    alignItems: 'center',
-  },
-  username: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  userRole: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  userEmail: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 4,
-  },
-  teamName: {
-    fontSize: 14,
-    color: '#8b5cf6',
-    fontWeight: '500',
-  },
-  statsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 16,
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  statItem: {
-    alignItems: 'center',
+  operatorDetails: {
     flex: 1,
   },
-  statValue: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#8b5cf6',
-    marginBottom: 4,
+  operatorName: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
+    marginBottom: Spacing.xs,
   },
-  statLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    textAlign: 'center',
+  operatorEmail: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.text.secondary,
+    marginBottom: Spacing.sm,
   },
-  activityCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  badgeContainer: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
   },
-  emptyActivityText: {
-    fontSize: 14,
-    color: '#9ca3af',
-    textAlign: 'center',
-    marginTop: 10,
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.accent,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+    gap: 2,
   },
-  activityItem: {
+  adminText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.inverse,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.success,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+    gap: 4,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.text.primary,
+  },
+  statusText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
+  },
+  squadPanel: {
+    backgroundColor: Colors.surface,
+    margin: Spacing.lg,
+    marginTop: 0,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border.medium,
+    ...Shadows.md,
+  },
+  settingsPanel: {
+    backgroundColor: Colors.surface,
+    margin: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border.medium,
+    ...Shadows.md,
+  },
+  infoPanel: {
+    backgroundColor: Colors.surface,
+    margin: Spacing.lg,
+    marginTop: 0,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border.medium,
+    ...Shadows.sm,
+  },
+  panelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  panelTitle: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
+    marginLeft: Spacing.sm,
+    letterSpacing: 1,
+  },
+  infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: Colors.border.light,
   },
-  activityEventTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#111827',
-    marginBottom: 2,
+  infoLabel: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.text.secondary,
+    minWidth: 100,
   },
-  activityDate: {
-    fontSize: 12,
-    color: '#6b7280',
+  infoValue: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.medium,
+    color: Colors.text.primary,
+    flex: 1,
+    textAlign: 'right',
   },
-  activitySlots: {
-    fontSize: 14,
-    color: '#10b981',
-    fontWeight: '500',
+  actionsPanel: {
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  actionButton: {
+    borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
+    ...Shadows.lg,
+  },
+  actionGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+  },
+  actionText: {
+    fontSize: Typography.sizes.md,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
+    marginLeft: Spacing.sm,
+    letterSpacing: 1,
+  },
+  languageOption: {
+    backgroundColor: Colors.tactical.medium,
+    borderWidth: 2,
+    borderColor: Colors.border.medium,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  selectedOption: {
+    borderColor: Colors.accent,
+    backgroundColor: Colors.tactical.light,
+  },
+  optionContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  optionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  flagEmoji: {
+    fontSize: Typography.sizes.lg,
+    marginRight: Spacing.sm,
+  },
+  optionText: {
+    fontSize: Typography.sizes.md,
+    fontWeight: Typography.weights.medium,
+    color: Colors.text.primary,
+  },
+  selectedText: {
+    fontWeight: Typography.weights.bold,
+    color: Colors.accent,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+  },
+  loadingText: {
+    fontSize: Typography.sizes.md,
+    color: Colors.text.secondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+    backgroundColor: Colors.background,
+  },
+  errorText: {
+    fontSize: Typography.sizes.lg,
+    color: Colors.text.secondary,
+    marginBottom: Spacing.xl,
+    textAlign: 'center',
+  },
+  button: {
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.md,
+  },
+  buttonText: {
+    color: Colors.text.inverse,
+    fontSize: Typography.sizes.md,
+    fontWeight: Typography.weights.semibold,
   },
 });
 

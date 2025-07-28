@@ -1,11 +1,13 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Ionicons } from '@expo/vector-icons';
-import { useLanguage } from '../../contexts/LanguageContext';
-import { Colors, Typography, Shadows } from '../../constants/theme';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { useApp } from '../../contexts/AppContext';
+import { Colors } from '../../constants/theme';
+import { RESPONSIVE } from '../../utils/responsive';
 
 export default function TabLayout() {
-  const { t } = useLanguage();
+  const { t } = useApp();
+  
   return (
     <Tabs
       screenOptions={{
@@ -13,41 +15,38 @@ export default function TabLayout() {
         tabBarInactiveTintColor: Colors.text.tertiary,
         tabBarStyle: {
           backgroundColor: Colors.surface,
-          borderTopWidth: 0,
-          ...Shadows.lg,
-          height: 80,
-          paddingBottom: 20,
-          paddingTop: 10,
+          borderTopWidth: 1,
+          borderTopColor: Colors.border.light,
+          height: RESPONSIVE.scale(70) + RESPONSIVE.safeArea.bottom,
+          paddingBottom: RESPONSIVE.safeArea.bottom + RESPONSIVE.spacing.sm,
+          paddingTop: RESPONSIVE.spacing.sm,
+          paddingHorizontal: RESPONSIVE.spacing.sm,
         },
         headerStyle: {
-          backgroundColor: Colors.surface,
-          elevation: 0,
-          shadowOpacity: 0,
+          backgroundColor: Colors.background,
         },
         headerTintColor: Colors.text.primary,
         headerTitleStyle: {
-          fontWeight: Typography.weights.bold,
+          fontWeight: 'bold',
         },
       }}>
       <Tabs.Screen
-        name="meet"
+        name="calendar"
         options={{
-          title: t.tabs.team,
+          title: t.tabs.calendar,
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people" size={size} color={color} />
+            <MaterialIcons name="calendar-today" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="groups"
+        name="group"
         options={{
-          title: t.tabs.availability,
-          headerTitle: t.teamAvailability.title,
-          headerLeft: () => null,
-          headerBackVisible: false,
+          title: t.tabs.group,
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar" size={size} color={color} />
+            <MaterialIcons name="groups" size={size} color={color} />
           ),
         }}
       />

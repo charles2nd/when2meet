@@ -1,65 +1,47 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { useRouter, useSegments } from 'expo-router';
+import React, { useEffect } from 'react';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
-import { useLanguage } from '../contexts/LanguageContext';
-import { Colors, Typography, Spacing } from '../constants/theme';
-import { logger } from '../utils/logger';
-import { StorageService } from '../services/storage';
 
 const IndexScreen: React.FC = () => {
-  const { user, loading } = useAuth();
-  const { t } = useLanguage();
+  const { user, loading, logoutTrigger, loginTrigger } = useAuth();
   const router = useRouter();
-  const segments = useSegments();
-  const [checkingTeam, setCheckingTeam] = useState(false);
 
   useEffect(() => {
-    const handleNavigation = async () => {
-      if (!loading) {
-        const inAuthGroup = segments[0] === '(tabs)';
-        
-        if (user && !inAuthGroup) {
-          setCheckingTeam(true);
-          
-          try {
-            // Check if user has a team
-            const currentTeamId = await StorageService.getCurrentTeamId();
-            
-            if (currentTeamId) {
-              // User has a team, go to calendar
-              logger.navigation.route('/(tabs)/meet', 'index-with-team');
-              router.replace('/(tabs)/meet');
-            } else {
-              // User doesn't have a team, go to find group screen
-              logger.navigation.route('/find-group', 'index-no-team');
-              router.replace('/find-group');
-            }
-          } catch (error) {
-            logger.error('INDEX', 'Error checking team status', error);
-            // Fallback to find group screen
-            logger.navigation.route('/find-group', 'index-error');
-            router.replace('/find-group');
-          } finally {
-            setCheckingTeam(false);
-          }
-        } else if (!user && inAuthGroup) {
-          logger.navigation.route('/login', 'index');
-          router.replace('/login');
-        } else if (!user && segments.length <= 0) {
-          logger.navigation.route('/login', 'index');
-          router.replace('/login');
-        }
+    console.log('[INDEX] Auth state changed:', { user: !!user, loading, userEmail: user?.email });
+    // Wait for loading to complete before navigating
+    if (!loading) {
+      if (user) {
+        console.log('[INDEX] User authenticated, navigating to tabs:', user.email);
+        router.replace('/(tabs)/calendar');
+      } else {
+        console.log('[INDEX] No authenticated user, navigating to login');
+        router.replace('/login');
       }
-    };
+    }
+  }, [user, loading, router]);
 
-    handleNavigation();
-  }, [user, loading, segments]);
+  // Handle logout trigger - force navigation to login
+  useEffect(() => {
+    if (logoutTrigger > 0) {
+      console.log('[INDEX] Logout triggered, forcing navigation to login');
+      router.replace('/login');
+    }
+  }, [logoutTrigger, router]);
+
+  // Handle login trigger - force navigation to tabs
+  useEffect(() => {
+    if (loginTrigger > 0 && user) {
+      console.log('[INDEX] Login triggered, forcing navigation to tabs');
+      router.replace('/(tabs)/calendar');
+    }
+  }, [loginTrigger, user, router]);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.loadingText}>
-        {checkingTeam ? 'Checking team status...' : t.common.loading}
+      <ActivityIndicator size="large" color="#007AFF" />
+      <Text style={styles.text}>
+        {loading ? 'Loading authentication...' : 'Initializing...'}
       </Text>
     </View>
   );
@@ -70,12 +52,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: '#f5f5f5',
   },
-  loadingText: {
-    fontSize: Typography.sizes.md,
-    color: Colors.text.secondary,
-    fontWeight: Typography.weights.medium,
+  text: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
   },
 });
 
