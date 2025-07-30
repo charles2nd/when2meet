@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 import { getWebStyle } from '../utils/webStyles';
+import { SafeHeader } from '../components/SafeHeader';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 import { translations } from '../services/translations';
 
@@ -28,13 +29,44 @@ const ModernLoginScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [language, setLanguage] = useState<'en' | 'fr'>('en');
   const [isSignUpMode, setIsSignUpMode] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const { signIn, signUp, signInGoogle, loading } = useAuth();
   const router = useRouter();
   const t = translations[language];
 
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim()) {
+      setEmailError(t.login.emailRequired || 'Email is required');
+      return false;
+    }
+    if (!emailRegex.test(email)) {
+      setEmailError(t.login.emailInvalid || 'Please enter a valid email address');
+      return false;
+    }
+    setEmailError('');
+    return true;
+  };
+
+  const validatePassword = (password: string) => {
+    if (!password.trim()) {
+      setPasswordError(t.login.passwordRequired || 'Password is required');
+      return false;
+    }
+    if (isSignUpMode && password.length < 6) {
+      setPasswordError(t.login.passwordTooShort || 'Password must be at least 6 characters');
+      return false;
+    }
+    setPasswordError('');
+    return true;
+  };
+
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert(t.login.missingInfo, t.login.enterBothFields);
+    const isEmailValid = validateEmail(email);
+    const isPasswordValid = validatePassword(password);
+    
+    if (!isEmailValid || !isPasswordValid) {
       return;
     }
 
@@ -150,12 +182,10 @@ const ModernLoginScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
-      
-      {/* Modern Header */}
-      <LinearGradient
+      <SafeHeader
+        title="When2Meet"
+        subtitle="Find the perfect meeting time"
         colors={[Colors.primary, Colors.primaryDark, Colors.tactical.dark]}
-        style={styles.header}
       >
         <View style={styles.logoContainer}>
           <LinearGradient
@@ -165,9 +195,7 @@ const ModernLoginScreen: React.FC = () => {
             <Ionicons name="calendar" size={24} color={Colors.text.inverse} />
           </LinearGradient>
         </View>
-        <Text style={styles.appTitle}>When2Meet</Text>
-        <Text style={styles.appSubtitle}>Find the perfect meeting time</Text>
-      </LinearGradient>
+      </SafeHeader>
 
       {/* Login Form */}
       <View style={styles.formContainer}>
@@ -194,6 +222,10 @@ const ModernLoginScreen: React.FC = () => {
                     onChangeText={setDisplayName}
                     autoCapitalize="words"
                     autoComplete="name"
+                    accessible={true}
+                    accessibilityLabel="Display name input"
+                    accessibilityHint="Enter your full name as it will appear to other users"
+                    returnKeyType="next"
                   />
                 </View>
               </View>
@@ -218,8 +250,17 @@ const ModernLoginScreen: React.FC = () => {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoComplete="email"
+                  accessible={true}
+                  accessibilityLabel="Email address input"
+                  accessibilityHint="Enter your email address to sign in"
+                  returnKeyType="next"
+                  textContentType="emailAddress"
+                  onBlur={() => validateEmail(email)}
                 />
               </View>
+              {emailError ? (
+                <Text style={styles.errorText}>{emailError}</Text>
+              ) : null}
             </View>
             
             {/* Password Input */}
@@ -240,10 +281,19 @@ const ModernLoginScreen: React.FC = () => {
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
                   autoComplete={isSignUpMode ? "new-password" : "password"}
+                  accessible={true}
+                  accessibilityLabel="Password input"
+                  accessibilityHint={isSignUpMode ? "Create a new password with at least 6 characters" : "Enter your password"}
+                  returnKeyType={isSignUpMode ? "next" : "go"}
+                  textContentType="password"
+                  onBlur={() => validatePassword(password)}
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
                   onPress={() => setShowPassword(!showPassword)}
+                  accessible={true}
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                  accessibilityRole="button"
                 >
                   <Ionicons 
                     name={showPassword ? "eye-outline" : "eye-off-outline"} 
@@ -252,6 +302,9 @@ const ModernLoginScreen: React.FC = () => {
                   />
                 </TouchableOpacity>
               </View>
+              {passwordError ? (
+                <Text style={styles.errorText}>{passwordError}</Text>
+              ) : null}
             </View>
             
             {/* Confirm Password Input (Sign Up Only) */}
@@ -283,6 +336,10 @@ const ModernLoginScreen: React.FC = () => {
               style={[styles.loginButton, getWebStyle('touchableOpacity')]} 
               onPress={isSignUpMode ? handleSignUp : handleLogin}
               disabled={isLoading || loading}
+              accessible={true}
+              accessibilityLabel={isSignUpMode ? "Create account button" : "Sign in button"}
+              accessibilityHint={isSignUpMode ? "Tap to create your new account" : "Tap to sign in to your account"}
+              accessibilityRole="button"
             >
               <LinearGradient
                 colors={[Colors.accent, '#FF8F00']}
@@ -365,8 +422,12 @@ const ModernLoginScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
               <Text style={styles.demoHint}>
-                Admin: admin@admin.com / admin{'\n'}
-                Or any email/password for user role{'\n'}
+                Admin: admin@admin.com / admin
+              </Text>
+              <Text style={styles.demoHint}>
+                Or any email/password for user role
+              </Text>
+              <Text style={styles.demoHint}>
                 📚 University Demo Group: TEST999
               </Text>
             </View>
@@ -455,14 +516,16 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.border.light,
     borderRadius: BorderRadius.lg,
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xs,
   },
   inputIcon: {
     marginRight: Spacing.sm,
   },
   input: {
     flex: 1,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.sm,
     fontSize: Typography.sizes.md,
     color: Colors.text.primary,
     backgroundColor: 'transparent',
@@ -624,6 +687,13 @@ const styles = StyleSheet.create({
   },
   setupLink: {
     color: Colors.accent,
+    fontWeight: Typography.weights.medium,
+  },
+  errorText: {
+    fontSize: Typography.sizes.sm,
+    color: '#FF6B6B',
+    marginTop: Spacing.xs,
+    marginLeft: Spacing.sm,
     fontWeight: Typography.weights.medium,
   },
 });

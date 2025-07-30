@@ -24,8 +24,39 @@ export class Group implements IGroup {
     this.createdAt = data.createdAt || new Date().toISOString();
   }
 
+  // Validation method
+  validate(): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    if (!this.name || this.name.trim().length === 0) {
+      errors.push('Group name is required');
+    }
+    
+    if (this.name && this.name.trim().length > 50) {
+      errors.push('Group name must be 50 characters or less');
+    }
+    
+    if (!this.code || this.code.length !== 6) {
+      errors.push('Group code must be exactly 6 characters');
+    }
+    
+    if (!this.adminId || this.adminId.trim().length === 0) {
+      errors.push('Group must have an admin');
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
   private generateCode(): string {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
   }
 
   addMember(userId: string): void {
@@ -63,5 +94,15 @@ export class Group implements IGroup {
 
   static fromJSON(data: IGroup): Group {
     return new Group(data);
+  }
+
+  // Helper method to ensure code is always uppercase
+  setCode(code: string): void {
+    this.code = code.toUpperCase();
+  }
+
+  // Helper method to ensure name is properly formatted
+  setName(name: string): void {
+    this.name = name.trim();
   }
 }

@@ -8,6 +8,7 @@ import { Availability } from '../models/SimpleAvailability';
 import { Colors, Typography, Spacing, BorderRadius, CommonStyles, HeaderStyles } from '../theme';
 import { getWebStyle } from '../utils/webStyles';
 import { AuthGuard } from '../components/AuthGuard';
+import { SafeHeader } from '../components/SafeHeader';
 
 // Simple debounce utility
 const debounce = (func: Function, wait: number) => {
@@ -131,19 +132,15 @@ const CalendarScreen: React.FC = () => {
   return (
     <AuthGuard>
       <View style={[CommonStyles.container]}>
-        <StatusBar barStyle="light-content" backgroundColor={Colors.tactical.dark} />
-        
-        {/* CS2 Header */}
-        <LinearGradient
+        <SafeHeader
+          title="MISSION CALENDAR"
+          subtitle="Set your operational availability"
           colors={[Colors.secondary, Colors.secondaryDark]}
-          style={HeaderStyles.headerCenter}
         >
           <View style={styles.logoContainer}>
             <Ionicons name="calendar-outline" size={32} color={Colors.accent} />
           </View>
-          <Text style={HeaderStyles.headerTitle}>MISSION CALENDAR</Text>
-          <Text style={HeaderStyles.headerSubtitle}>Set your operational availability</Text>
-        </LinearGradient>
+        </SafeHeader>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Date Selection Panel */}
@@ -259,6 +256,7 @@ const styles = StyleSheet.create({
   dateContainer: {
     flexDirection: 'row',
     paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
   },
   dateButton: {
     width: 50,
@@ -287,10 +285,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.xs,
+    paddingHorizontal: Spacing.xs,
   },
   hourButton: {
     width: '23%',
-    padding: Spacing.sm,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
     borderRadius: BorderRadius.sm,
     backgroundColor: Colors.tactical.medium,
     alignItems: 'center',
@@ -312,7 +312,9 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
   },
   saveContainer: {
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    paddingBottom: Spacing.xxl,
   },
   noGroupText: {
     fontSize: Typography.sizes.lg,

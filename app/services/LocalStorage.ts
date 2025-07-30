@@ -7,7 +7,26 @@ export class LocalStorage {
   // User Management
   static async saveUser(user: User): Promise<void> {
     console.log('[STORAGE] Saving user:', user.id);
+    
+    // Validate user before saving
+    const validation = user.validate();
+    if (!validation.isValid) {
+      throw new Error(`Invalid user data: ${validation.errors.join(', ')}`);
+    }
+    
+    // Check for unique email
+    const isEmailUnique = await this.isUserEmailUnique(user.email, user.id);
+    if (!isEmailUnique) {
+      throw new Error(`Email "${user.email}" is already in use`);
+    }
+    
+    // Sanitize user data
+    user.sanitize();
+    
     await AsyncStorage.setItem('current_user', JSON.stringify(user.toJSON()));
+    
+    // Also store in all users registry for uniqueness checking
+    await this.addUserToRegistry(user);
   }
 
   static async getUser(): Promise<User | null> {
@@ -19,6 +38,13 @@ export class LocalStorage {
 
   static async clearUser(): Promise<void> {
     console.log('[STORAGE] Clearing user...');
+    
+    // Get current user first to remove from registry
+    const currentUser = await this.getUser();
+    if (currentUser) {
+      await this.removeUserFromRegistry(currentUser.id);
+    }
+    
     await AsyncStorage.removeItem('current_user');
   }
 
@@ -34,8 +60,26 @@ export class LocalStorage {
   }
 
   // Group Management
-  static async saveGroup(group: Group): Promise<void> {
-    console.log('[STORAGE] Saving group:', group.id);
+  static async saveGroup(group: Group, skipValidation: boolean = false): Promise<void> {
+    console.log('[STORAGE] Saving group:', group.id, 'skipValidation:', skipValidation);
+    
+    if (!skipValidation) {
+      // Check for duplicate codes before saving
+      const existingGroups = await this.getAllGroups();
+      const duplicateByCode = existingGroups.find(g => g.id !== group.id && g.code === group.code);
+      if (duplicateByCode) {
+        throw new Error(`Group code ${group.code} already exists`);
+      }
+      
+      // Check for duplicate names (case-insensitive)
+      const duplicateByName = existingGroups.find(g => 
+        g.id !== group.id && g.name.toLowerCase() === group.name.toLowerCase()
+      );
+      if (duplicateByName) {
+        throw new Error(`Group name "${group.name}" already exists`);
+      }
+    }
+    
     await AsyncStorage.setItem(`group_${group.id}`, JSON.stringify(group.toJSON()));
   }
 
@@ -62,10 +106,60 @@ export class LocalStorage {
     return groups;
   }
 
+  static async getUserGroups(userId: string): Promise<Group[]> {
+    console.log('[STORAGE] Loading groups for user:', userId);
+    const allGroups = await this.getAllGroups();
+    return allGroups.filter(group => 
+      group.members.includes(userId) || group.adminId === userId
+    );
+  }
+
+  static async getUserAdminGroups(userId: string): Promise<Group[]> {
+    console.log('[STORAGE] Loading admin groups for user:', userId);
+    const allGroups = await this.getAllGroups();
+    return allGroups.filter(group => group.adminId === userId);
+  }
+
   static async findGroupByCode(code: string): Promise<Group | null> {
     console.log('[STORAGE] Finding group by code:', code);
     const groups = await this.getAllGroups();
-    return groups.find(g => g.code === code) || null;
+    return groups.find(g => g.code === code.toUpperCase()) || null;
+  }
+
+  static async isGroupCodeUnique(code: string, excludeGroupId?: string): Promise<boolean> {
+    console.log('[STORAGE] Checking if group code is unique:', code);
+    const groups = await this.getAllGroups();
+    return !groups.some(g => g.code === code.toUpperCase() && g.id !== excludeGroupId);
+  }
+
+  static async isGroupNameUnique(name: string, excludeGroupId?: string): Promise<boolean> {
+    console.log('[STORAGE] Checking if group name is unique:', name);
+    const groups = await this.getAllGroups();
+    return !groups.some(g => 
+      g.name.toLowerCase() === name.toLowerCase() && g.id !== excludeGroupId
+    );
+  }
+
+  static async generateUniqueGroupCode(): Promise<string> {
+    const maxAttempts = 100;
+    let attempts = 0;
+    
+    while (attempts < maxAttempts) {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let code = '';
+      for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      
+      if (await this.isGroupCodeUnique(code)) {
+        console.log('[STORAGE] Generated unique group code:', code);
+        return code;
+      }
+      
+      attempts++;
+    }
+    
+    throw new Error('Failed to generate unique group code after 100 attempts');
   }
 
   static async removeGroup(groupId: string): Promise<void> {
@@ -110,6 +204,153 @@ export class LocalStorage {
     console.log('[STORAGE] Removing availability for user:', userId, 'group:', groupId);
     const key = `availability_${userId}_${groupId}`;
     await AsyncStorage.removeItem(key);
+  }
+
+  // Group validation
+  static async validateGroupUniqueness(group: Group): Promise<{ isValid: boolean; error?: string }> {
+    try {
+      const existingGroups = await this.getAllGroups();
+      
+      // Check for duplicate codes
+      const duplicateByCode = existingGroups.find(g => 
+        g.id !== group.id && g.code === group.code
+      );
+      if (duplicateByCode) {
+        return { 
+          isValid: false, 
+          error: `Group code "${group.code}" already exists` 
+        };
+      }
+      
+      // Check for duplicate names (case-insensitive)
+      const duplicateByName = existingGroups.find(g => 
+        g.id !== group.id && g.name.toLowerCase() === group.name.toLowerCase()
+      );
+      if (duplicateByName) {
+        return { 
+          isValid: false, 
+          error: `Group name "${group.name}" already exists` 
+        };
+      }
+      
+      return { isValid: true };
+    } catch (error) {
+      return { 
+        isValid: false, 
+        error: `Validation error: ${error}` 
+      };
+    }
+  }
+
+  // User uniqueness management
+  static async addUserToRegistry(user: User): Promise<void> {
+    try {
+      const registryData = await AsyncStorage.getItem('user_registry');
+      const registry: { [key: string]: { id: string; email: string; name: string } } = 
+        registryData ? JSON.parse(registryData) : {};
+      
+      registry[user.id] = {
+        id: user.id,
+        email: user.email,
+        name: user.name
+      };
+      
+      await AsyncStorage.setItem('user_registry', JSON.stringify(registry));
+    } catch (error) {
+      console.error('[STORAGE] Error updating user registry:', error);
+    }
+  }
+
+  static async removeUserFromRegistry(userId: string): Promise<void> {
+    try {
+      const registryData = await AsyncStorage.getItem('user_registry');
+      if (registryData) {
+        const registry = JSON.parse(registryData);
+        delete registry[userId];
+        await AsyncStorage.setItem('user_registry', JSON.stringify(registry));
+      }
+    } catch (error) {
+      console.error('[STORAGE] Error removing user from registry:', error);
+    }
+  }
+
+  static async isUserEmailUnique(email: string, excludeUserId?: string): Promise<boolean> {
+    try {
+      const registryData = await AsyncStorage.getItem('user_registry');
+      if (!registryData) return true;
+      
+      const registry = JSON.parse(registryData);
+      const normalizedEmail = email.toLowerCase();
+      
+      for (const userId in registry) {
+        if (userId !== excludeUserId && 
+            registry[userId].email.toLowerCase() === normalizedEmail) {
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('[STORAGE] Error checking email uniqueness:', error);
+      return false;
+    }
+  }
+
+  static async getUserByEmail(email: string): Promise<User | null> {
+    try {
+      const registryData = await AsyncStorage.getItem('user_registry');
+      if (!registryData) return null;
+      
+      const registry = JSON.parse(registryData);
+      const normalizedEmail = email.toLowerCase();
+      
+      for (const userId in registry) {
+        if (registry[userId].email.toLowerCase() === normalizedEmail) {
+          // Try to get the full user data
+          const userData = await AsyncStorage.getItem(`user_${userId}`);
+          if (userData) {
+            return User.fromJSON(JSON.parse(userData));
+          }
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('[STORAGE] Error finding user by email:', error);
+      return null;
+    }
+  }
+
+  // Security validation
+  static validateInput(input: string, maxLength: number = 255): string {
+    if (!input || typeof input !== 'string') {
+      throw new Error('Invalid input: must be a non-empty string');
+    }
+    
+    const trimmed = input.trim();
+    if (trimmed.length === 0) {
+      throw new Error('Input cannot be empty');
+    }
+    
+    if (trimmed.length > maxLength) {
+      throw new Error(`Input too long: maximum ${maxLength} characters`);
+    }
+    
+    // Basic XSS prevention
+    const dangerous = /<script|javascript:|on\w+=/i;
+    if (dangerous.test(trimmed)) {
+      throw new Error('Input contains potentially dangerous content');
+    }
+    
+    return trimmed;
+  }
+
+  static sanitizeEmail(email: string): string {
+    return this.validateInput(email, 320).toLowerCase();
+  }
+
+  static sanitizeName(name: string): string {
+    return this.validateInput(name, 100);
   }
 
   // Clear all data

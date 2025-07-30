@@ -3,7 +3,7 @@
  * Reusable styles following CS2 design principles
  */
 
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
 import { cs2Theme } from './cs2Theme';
 
 const { colors, spacing, borderRadius, shadows, typography } = cs2Theme;
@@ -142,15 +142,25 @@ export const CommonStyles = StyleSheet.create({
   shadowLg: shadows.lg,
 });
 
-// CS2 Header Pattern
+// CS2 Header Pattern - Dynamic safe area support
 export const HeaderStyles = StyleSheet.create({
   header: {
-    paddingTop: 50,
+    paddingTop: Platform.OS === 'ios' ? 60 : 50, // Increased for iPhone notch
     paddingBottom: spacing.xl,
     paddingHorizontal: spacing.lg,
   },
   headerCenter: {
-    paddingTop: 50,
+    paddingTop: Platform.OS === 'ios' ? 60 : 50, // Increased for iPhone notch
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+  },
+  // Safe area aware headers for newer iPhones
+  headerSafe: {
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.lg,
+  },
+  headerCenterSafe: {
     paddingBottom: spacing.xl,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',

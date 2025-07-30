@@ -1,15 +1,24 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/theme';
 import { RESPONSIVE } from '../utils/responsive';
+import { Group } from '../models/Group';
 
 const SimpleProfileScreen: React.FC = () => {
-  const { currentGroup, language, setLanguage, leaveGroup, t } = useApp();
+  const { currentGroup, userGroups, language, setLanguage, leaveGroup, loadUserGroups, t } = useApp();
   const { user: authUser, signOut } = useAuth();
   const router = useRouter();
+
+  // Load user groups when component mounts
+  useEffect(() => {
+    if (authUser) {
+      loadUserGroups();
+    }
+  }, [authUser, loadUserGroups]);
 
   const handleLanguageChange = (lang: 'en' | 'fr') => {
     console.log('[PROFILE] Changing language to:', lang);
@@ -36,6 +45,53 @@ const SimpleProfileScreen: React.FC = () => {
           }
         }
       ]
+    );
+  };
+
+  const renderGroupItem = ({ item: group }: { item: Group }) => {
+    const isCurrentGroup = currentGroup?.id === group.id;
+    const isAdmin = group.adminId === authUser?.uid;
+    
+    return (
+      <View style={[styles.groupItem, isCurrentGroup && styles.currentGroupItem]}>
+        <View style={styles.groupHeader}>
+          <View style={styles.groupInfo}>
+            <Text style={styles.groupName}>{group.name}</Text>
+            <Text style={styles.groupCode}>Code: {group.code}</Text>
+            <Text style={styles.groupMembers}>
+              {group.members.length} {group.members.length === 1 ? 'member' : 'members'}
+            </Text>
+          </View>
+          <View style={styles.groupBadges}>
+            {isAdmin && (
+              <View style={styles.adminBadge}>
+                <Ionicons name="shield-checkmark" size={16} color={Colors.accent} />
+                <Text style={styles.adminText}>Admin</Text>
+              </View>
+            )}
+            {isCurrentGroup && (
+              <View style={styles.currentBadge}>
+                <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+                <Text style={styles.currentText}>Current</Text>
+              </View>
+            )}
+          </View>
+        </View>
+        
+        <Text style={styles.groupCreatedAt}>
+          Created: {new Date(group.createdAt).toLocaleDateString()}
+        </Text>
+        
+        {isCurrentGroup && (
+          <TouchableOpacity 
+            style={styles.leaveGroupButton} 
+            onPress={handleLeaveGroup}
+          >
+            <Ionicons name="exit-outline" size={16} color={Colors.text.inverse} />
+            <Text style={styles.leaveGroupButtonText}>{t.profile.leaveGroup}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   };
 
@@ -113,20 +169,29 @@ const SimpleProfileScreen: React.FC = () => {
         </View>
       </View>
 
-      {currentGroup && (
-        <View style={styles.section}>
-          <Text style={styles.label}>{t.profile.currentGroup}</Text>
-          <Text style={styles.value}>{currentGroup.name}</Text>
-          <Text style={styles.groupCode}>{t.profile.groupCode}: {currentGroup.code}</Text>
-          
-          <TouchableOpacity 
-            style={styles.leaveButton} 
-            onPress={handleLeaveGroup}
-          >
-            <Text style={styles.leaveButtonText}>{t.profile.leaveGroup}</Text>
-          </TouchableOpacity>
+      {/* User Groups Section */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="people" size={20} color={Colors.primary} />
+          <Text style={styles.sectionTitle}>My Groups ({userGroups.length})</Text>
         </View>
-      )}
+        
+        {userGroups.length > 0 ? (
+          <FlatList
+            data={userGroups}
+            renderItem={renderGroupItem}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+            ItemSeparatorComponent={() => <View style={styles.groupSeparator} />}
+          />
+        ) : (
+          <View style={styles.noGroupsContainer}>
+            <Ionicons name="people-outline" size={48} color={Colors.text.tertiary} />
+            <Text style={styles.noGroupsText}>No groups joined yet</Text>
+            <Text style={styles.noGroupsSubtext}>Create or join a group to get started</Text>
+          </View>
+        )}
+      </View>
 
       <TouchableOpacity 
         style={styles.logoutButton} 
@@ -156,7 +221,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     marginHorizontal: RESPONSIVE.spacing.md,
     marginBottom: RESPONSIVE.spacing.md,
-    padding: RESPONSIVE.spacing.md,
+    paddingHorizontal: RESPONSIVE.spacing.lg,
+    paddingVertical: RESPONSIVE.spacing.md,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border.light,
@@ -177,7 +243,8 @@ const styles = StyleSheet.create({
   },
   languageButton: {
     flex: 1,
-    padding: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: Colors.border.medium,
     alignItems: 'center',
@@ -232,6 +299,122 @@ const styles = StyleSheet.create({
     fontSize: RESPONSIVE.fontSizes.lg,
     textAlign: 'center',
     marginTop: RESPONSIVE.spacing.xl,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: RESPONSIVE.spacing.md,
+  },
+  sectionTitle: {
+    fontSize: RESPONSIVE.fontSizes.lg,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    marginLeft: RESPONSIVE.spacing.sm,
+  },
+  groupItem: {
+    backgroundColor: Colors.surface,
+    borderRadius: 8,
+    padding: RESPONSIVE.spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+  },
+  currentGroupItem: {
+    borderColor: Colors.success,
+    borderWidth: 2,
+  },
+  groupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: RESPONSIVE.spacing.sm,
+  },
+  groupInfo: {
+    flex: 1,
+  },
+  groupName: {
+    fontSize: RESPONSIVE.fontSizes.md,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    marginBottom: 4,
+  },
+  groupCode: {
+    fontSize: RESPONSIVE.fontSizes.sm,
+    color: Colors.text.secondary,
+    marginBottom: 2,
+  },
+  groupMembers: {
+    fontSize: RESPONSIVE.fontSizes.sm,
+    color: Colors.text.secondary,
+  },
+  groupBadges: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.accent,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  adminText: {
+    fontSize: RESPONSIVE.fontSizes.xs,
+    color: Colors.text.inverse,
+    fontWeight: 'bold',
+  },
+  currentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.success,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  currentText: {
+    fontSize: RESPONSIVE.fontSizes.xs,
+    color: Colors.text.inverse,
+    fontWeight: 'bold',
+  },
+  groupCreatedAt: {
+    fontSize: RESPONSIVE.fontSizes.xs,
+    color: Colors.text.tertiary,
+    marginTop: RESPONSIVE.spacing.sm,
+  },
+  leaveGroupButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.error,
+    paddingHorizontal: RESPONSIVE.spacing.md,
+    paddingVertical: RESPONSIVE.spacing.sm,
+    borderRadius: 8,
+    marginTop: RESPONSIVE.spacing.md,
+    gap: RESPONSIVE.spacing.xs,
+  },
+  leaveGroupButtonText: {
+    color: Colors.text.inverse,
+    fontSize: RESPONSIVE.fontSizes.sm,
+    fontWeight: 'bold',
+  },
+  groupSeparator: {
+    height: RESPONSIVE.spacing.sm,
+  },
+  noGroupsContainer: {
+    alignItems: 'center',
+    paddingVertical: RESPONSIVE.spacing.xl,
+    gap: RESPONSIVE.spacing.sm,
+  },
+  noGroupsText: {
+    fontSize: RESPONSIVE.fontSizes.md,
+    color: Colors.text.secondary,
+    fontWeight: '500',
+  },
+  noGroupsSubtext: {
+    fontSize: RESPONSIVE.fontSizes.sm,
+    color: Colors.text.tertiary,
+    textAlign: 'center',
   },
 });
 

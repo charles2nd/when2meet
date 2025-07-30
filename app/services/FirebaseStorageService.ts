@@ -698,7 +698,7 @@ export class FirebaseStorageService {
     
     try {
       // Load user's teams
-      const teamsResult = await this.getUserTeams(userId);
+      const teamsResult = await this.getTeams(userId);
       if (teamsResult.success && teamsResult.data) {
         console.log('[FIREBASE_STORAGE] Loaded', teamsResult.data.length, 'teams from storage');
         

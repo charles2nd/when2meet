@@ -74,7 +74,9 @@ export const translations = {
       shareErrorMessage: 'Unable to share group. Please try again.',
       squadNameLabel: 'Squad Name',
       shareInstructions: 'Use this code in the When2Meet app to join our tactical unit and coordinate meeting times!',
-      shareTitle: 'Join'
+      shareTitle: 'Join',
+      joiningGroup: 'Joining...',
+      creatingGroup: 'Creating...'
     },
     profile: {
       title: 'Profile',
@@ -110,7 +112,11 @@ export const translations = {
       googleLoginFailed: 'Google Login Failed',
       googleLoginFailedMessage: 'Unable to sign in with Google. Please try again.',
       googleLoginError: 'Google Login Error',
-      googleLoginErrorMessage: 'An error occurred during Google login.'
+      googleLoginErrorMessage: 'An error occurred during Google login.',
+      emailRequired: 'Email is required',
+      emailInvalid: 'Please enter a valid email address',
+      passwordRequired: 'Password is required',
+      passwordTooShort: 'Password must be at least 6 characters'
     }
   },
   fr: {
@@ -188,7 +194,9 @@ export const translations = {
       shareErrorMessage: 'Impossible de partager le groupe. Veuillez réessayer.',
       squadNameLabel: 'Nom de l\'Équipe',
       shareInstructions: 'Utilisez ce code dans l\'application When2Meet pour rejoindre notre unité tactique et coordonner les heures de réunion!',
-      shareTitle: 'Rejoindre'
+      shareTitle: 'Rejoindre',
+      joiningGroup: 'Rejoindre...',
+      creatingGroup: 'Création...'
     },
     profile: {
       title: 'Profil',
@@ -224,7 +232,11 @@ export const translations = {
       googleLoginFailed: 'Connexion Google Échouée',
       googleLoginFailedMessage: 'Impossible de se connecter avec Google. Veuillez réessayer.',
       googleLoginError: 'Erreur de Connexion Google',
-      googleLoginErrorMessage: 'Une erreur s\'est produite lors de la connexion Google.'
+      googleLoginErrorMessage: 'Une erreur s\'est produite lors de la connexion Google.',
+      emailRequired: 'L\'email est requis',
+      emailInvalid: 'Veuillez entrer une adresse email valide',
+      passwordRequired: 'Le mot de passe est requis',
+      passwordTooShort: 'Le mot de passe doit contenir au moins 6 caractères'
     }
   }
 };
@@ -233,7 +245,7 @@ export type Language = 'en' | 'fr';
 export type TranslationKey = typeof translations.en;
 
 // Safe translation function to prevent crashes
-export const getTranslation = (key: string, lang: Language = 'en'): string => {
+export const getTranslation = (key: string, lang: Language = 'fr'): string => {
   try {
     const keys = key.split('.');
     let value: any = translations[lang] || translations.en;
@@ -242,13 +254,21 @@ export const getTranslation = (key: string, lang: Language = 'en'): string => {
       if (value && typeof value === 'object' && k in value) {
         value = value[k];
       } else {
-        // Fallback to English if key not found
-        value = translations.en;
+        // Fallback to French if key not found
+        value = translations.fr;
         for (const k of keys) {
           if (value && typeof value === 'object' && k in value) {
             value = value[k];
           } else {
-            return key; // Return key itself if not found
+            // Try English as last resort
+            value = translations.en;
+            for (const k of keys) {
+              if (value && typeof value === 'object' && k in value) {
+                value = value[k];
+              } else {
+                return key; // Return key itself if not found
+              }
+            }
           }
         }
       }

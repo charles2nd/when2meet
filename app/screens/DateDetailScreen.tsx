@@ -374,7 +374,8 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   section: {
-    padding: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     backgroundColor: Colors.surface,
     marginBottom: 8,
   },
@@ -411,7 +412,8 @@ const styles = StyleSheet.create({
   },
   chatSection: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     backgroundColor: Colors.surface,
   },
   messagesList: {
@@ -445,7 +447,8 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     backgroundColor: Colors.surface,
     borderTopWidth: 1,
     borderTopColor: Colors.border.light,
@@ -470,7 +473,8 @@ const styles = StyleSheet.create({
   },
   timeRangeSection: {
     marginTop: 16,
-    padding: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     backgroundColor: Colors.card,
     borderRadius: 8,
   },
@@ -523,7 +527,8 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
-    padding: 24,
+    paddingHorizontal: 32,
+    paddingVertical: 24,
     width: '90%',
     maxHeight: '80%',
   },

@@ -76,7 +76,7 @@ const MeetScreen: React.FC = () => {
       
       // Then load from remote storage
       if (user) {
-        const teamsResult = await FirebaseStorageService.getUserTeams(user.uid);
+        const teamsResult = await FirebaseStorageService.getTeams(user.uid);
         if (teamsResult.success && teamsResult.data) {
           setTeams(teamsResult.data);
           console.log('[MEET_SCREEN] Loaded', teamsResult.data.length, 'teams from remote');

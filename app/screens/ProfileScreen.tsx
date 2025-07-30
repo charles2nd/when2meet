@@ -8,6 +8,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
 import { SessionManager } from '../services/SessionManager';
+import { SafeHeader } from '../components/SafeHeader';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 
 const ProfileScreen: React.FC = () => {
@@ -111,31 +112,25 @@ const ProfileScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor={Colors.tactical.dark} />
-        
-        {/* CS2-style header */}
-        <LinearGradient
+        <SafeHeader
+          title="OPERATOR PROFILE"
+          subtitle="Tactical personnel data"
           colors={[Colors.primary, Colors.primaryDark]}
-          style={styles.header}
+          centered={false}
         >
           <View style={styles.headerContent}>
-            <View style={styles.operatorInfo}>
-              <Text style={styles.headerTitle}>OPERATOR PROFILE</Text>
-              <Text style={styles.headerSubtitle}>Tactical personnel data</Text>
-            </View>
-          
-          <TouchableOpacity
-            style={styles.settingsButton}
-            onPress={() => setShowSettings(!showSettings)}
-          >
-            <Ionicons 
-              name={showSettings ? "close" : "settings"} 
-              size={24} 
-              color={Colors.text.primary} 
-            />
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
+            <TouchableOpacity
+              style={styles.settingsButton}
+              onPress={() => setShowSettings(!showSettings)}
+            >
+              <Ionicons 
+                name={showSettings ? "close" : "settings"} 
+                size={24} 
+                color={Colors.text.primary} 
+              />
+            </TouchableOpacity>
+          </View>
+        </SafeHeader>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {!showSettings ? (
