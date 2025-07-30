@@ -31,7 +31,7 @@ interface AppContextType {
   logout: () => Promise<void>;
   createGroup: (name: string) => Promise<Group>;
   joinGroup: (code: string) => Promise<boolean>;
-  leaveGroup: () => Promise<void>;
+  // leaveGroup: () => Promise<void>; // Temporarily disabled
   saveAvailability: (availability: Availability) => Promise<void>;
   loadGroupAvailabilities: () => Promise<void>;
   loadUserGroups: () => Promise<void>;
@@ -92,30 +92,94 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Sync user from AuthContext to AppContext (only after language is loaded)
   useEffect(() => {
-    if (!languageLoaded) return; // Wait for language to load first
+    const syncUser = async () => {
+      if (!languageLoaded) return; // Wait for language to load first
+      
+      if (authUser) {
+        console.log('[APP] Syncing user from Firebase Auth:', authUser.uid);
+        
+        // ALWAYS create fresh user data from Firebase Auth - don't rely on local cache for user identity
+        const appUser = new User({
+          id: authUser.uid,
+          name: authUser.displayName || 'User',
+          email: authUser.email,
+          language: language,
+          groupId: undefined // Clear groupId - will be loaded from Firebase
+        });
+        
+        // Update user data in Firebase to ensure consistency
+        try {
+          await FirebaseGroupService.updateUserData(appUser);
+          console.log('[APP] User data synchronized with Firebase');
+        } catch (error) {
+          console.error('[APP] Failed to sync user data with Firebase:', error);
+        }
+        
+        setUser(appUser);
+        console.log('[APP] User synced from AuthContext (fresh from Firebase):', appUser.toJSON());
+        
+        // Force refresh user groups from Firebase (not local cache)
+        console.log('[APP] Force refreshing user groups from Firebase...');
+        try {
+          // Try Firebase first to get fresh data
+          const firebaseGroups = await FirebaseGroupService.getUserGroups(authUser.uid);
+          setUserGroups(firebaseGroups);
+          console.log('[APP] Loaded', firebaseGroups.length, 'groups from Firebase during sync');
+          
+          // If user has groups, set the first one as current (or find saved current group)
+          if (firebaseGroups.length > 0) {
+            // Try to get saved current group
+            const savedUser = await LocalStorage.getUser();
+            if (savedUser?.groupId) {
+              const currentGroup = firebaseGroups.find(g => g.id === savedUser.groupId);
+              if (currentGroup) {
+                setCurrentGroup(currentGroup);
+                // Update user with correct groupId
+                const updatedUser = new User({
+                  id: authUser.uid,
+                  name: authUser.displayName || 'User',
+                  email: authUser.email,
+                  language: language,
+                  groupId: currentGroup.id
+                });
+                setUser(updatedUser);
+                console.log('[APP] Restored current group from saved data:', currentGroup.name);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('[APP] Error loading groups from Firebase during sync, trying local fallback:', error);
+          // Fallback to local only if Firebase completely fails
+          try {
+            const localGroups = await LocalStorage.getUserGroups(authUser.uid);
+            setUserGroups(localGroups);
+            console.log('[APP] Loaded', localGroups.length, 'groups from local storage fallback');
+          } catch (localError) {
+            console.error('[APP] Both Firebase and local group loading failed:', localError);
+            setUserGroups([]);
+          }
+        }
+      } else {
+        // User logged out - clear all data
+        setUser(null);
+        setCurrentGroup(null);
+        setUserGroups([]);
+        setMyAvailability(null);
+        setGroupAvailabilities([]);
+        console.log('[APP] User logged out - cleared all data');
+      }
+    };
     
-    if (authUser) {
-      // Create or update AppContext user based on AuthContext user
-      const appUser = new User({
-        id: authUser.uid,
-        name: authUser.displayName || 'User',
-        email: authUser.email,
-        language: language
-      });
-      setUser(appUser);
-      console.log('[APP] User synced from AuthContext:', appUser.toJSON());
-    } else {
-      setUser(null);
-      setCurrentGroup(null); // Clear group when user logs out
-      console.log('[APP] User cleared from AuthContext');
-    }
+    syncUser();
   }, [authUser, languageLoaded]); // Removed language dependency to prevent loops
 
   // Load saved data when user changes (only once per user)
   useEffect(() => {
-    if (user && !isLoading && !currentGroup) { // Only load if we don't already have data and not loading
-      console.log('[APP] Loading saved data for new user:', user.id);
-      loadSavedData();
+    if (user && !isLoading) { // Load data when user is available and not already loading
+      console.log('[APP] Loading saved data for user (REDUCED CACHING):', user.id);
+      // Don't load cached data - data is already loaded fresh from Firebase in syncUser
+      // This prevents stale cache from overriding fresh Firebase data
+      setIsLoading(false);
     }
   }, [user, isLoading]); // Add isLoading dependency to prevent race conditions
 
@@ -225,30 +289,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     
     // Name uniqueness will be checked by FirebaseGroupService
     
-    // Generate a unique code
-    const uniqueCode = await LocalStorage.generateUniqueGroupCode();
-    
-    const group = new Group({ 
-      name: name.trim(),
-      code: uniqueCode,
-      adminId: user.id  // Creator becomes admin automatically
-    });
-    group.addMember(user.id);
-    
-    // Validate the group
-    const validation = group.validate();
-    if (!validation.isValid) {
-      throw new Error(`Invalid group data: ${validation.errors.join(', ')}`);
-    }
-    
     try {
       // Use Firebase Group Service to create group
-      const group = await FirebaseGroupService.createGroup({
+      const firebaseGroup = await FirebaseGroupService.createGroup({
         name: name.trim(),
         adminUser: user
       });
       
-      console.log('[APP] Group created successfully with Firebase:', group.toJSON());
+      console.log('[APP] Group created successfully with Firebase:', firebaseGroup.toJSON());
     
     // Update user with group association
     const updatedUser = new User({
@@ -256,18 +304,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       name: user.name,
       email: user.email,
       language: user.language,
-      groupId: group.id
+      groupId: firebaseGroup.id
     });
     setUser(updatedUser);
     await LocalStorage.saveUser(updatedUser);
     
     // Set current group (this will trigger tab visibility)
-    setCurrentGroup(group);
+    setCurrentGroup(firebaseGroup);
     
     // Initialize availability for the creator
     const availability = new Availability({
       userId: user.id,
-      groupId: group.id
+      groupId: firebaseGroup.id
     });
     setMyAvailability(availability);
     await LocalStorage.saveAvailability(availability);
@@ -275,8 +323,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Reload user groups to include the new group
     await loadUserGroups();
     
-      console.log('[APP] Group creation complete. User is admin:', group.isAdmin(user.id));
-      return group;
+      console.log('[APP] Group creation complete. User is admin:', firebaseGroup.isAdmin(user.id));
+      return firebaseGroup;
     } catch (error) {
       console.error('[APP] Firebase group creation failed, using local fallback:', error);
       
@@ -367,6 +415,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } else {
         // Add user to group members for regular groups
         group.addMember(user.id);
+        
+        // Save to Firebase first
+        try {
+          await FirebaseGroupService.addUserToGroup(group.id, user);
+          console.log('[APP] User added to group in Firebase');
+        } catch (error) {
+          console.error('[APP] Failed to add user to Firebase group, saving locally:', error);
+        }
+        
+        // Always save locally as backup
         await LocalStorage.saveGroup(group);
         console.log('[APP] User added to group, updated group saved');
       }
@@ -409,41 +467,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return true;
   };
 
-  const leaveGroup = async () => {
-    console.log('[APP] Leaving group...');
-    if (!user || !currentGroup) return;
-    
-    try {
-      // Remove user from group members
-      currentGroup.removeMember(user.id);
-      await LocalStorage.saveGroup(currentGroup);
-      await LocalStorage.removeAvailability(user.id, currentGroup.id);
-      
-      // Update user object without groupId
-      const updatedUserLeave = new User({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        language: user.language,
-        groupId: undefined
-      });
-      setUser(updatedUserLeave);
-      await LocalStorage.saveUser(updatedUserLeave);
-      
-      // Clear current group and availability states
-      setCurrentGroup(null);
-      setMyAvailability(null);
-      setGroupAvailabilities([]);
-      
-      // Reload user groups to reflect the change
-      await loadUserGroups();
-      
-      console.log('[APP] Successfully left group');
-    } catch (error) {
-      console.error('[APP] Error leaving group:', error);
-      throw error;
-    }
-  };
+  // Note: leaveGroup functionality temporarily disabled
 
   const saveAvailability = async (availability: Availability) => {
     console.log('[APP] Saving availability...');
@@ -490,26 +514,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const loadUserGroups = async () => {
-    console.log('[APP] Loading user groups...');
+    console.log('[APP] Loading user groups - FORCE REFRESH from Firebase...');
     if (!user) {
       setUserGroups([]);
       return;
     }
     
     try {
-      // Try Firebase first
+      // ALWAYS try Firebase first for fresh data - don't rely on cache
+      console.log('[APP] Fetching fresh groups from Firebase for user:', user.id);
       const groups = await FirebaseGroupService.getUserGroups(user.id);
+      
+      // Update local cache with fresh Firebase data
+      for (const group of groups) {
+        await LocalStorage.saveGroup(group);
+      }
+      
       setUserGroups(groups);
-      console.log('[APP] Loaded', groups.length, 'groups from Firebase');
+      console.log('[APP] ✅ Loaded', groups.length, 'groups from Firebase and updated local cache');
+      
+      // Update current group if user has groups but no current group set
+      if (groups.length > 0 && !currentGroup) {
+        // Try to restore saved current group
+        const savedUser = await LocalStorage.getUser();
+        if (savedUser?.groupId) {
+          const savedCurrentGroup = groups.find(g => g.id === savedUser.groupId);
+          if (savedCurrentGroup) {
+            setCurrentGroup(savedCurrentGroup);
+            console.log('[APP] Restored current group:', savedCurrentGroup.name);
+          }
+        }
+      }
     } catch (error) {
-      console.error('[APP] Firebase groups load failed, using local:', error);
-      // Fallback to local storage
+      console.error('[APP] Firebase groups load failed, using local cache as last resort:', error);
+      // Only fallback to local storage if Firebase completely fails
       try {
         const groups = await LocalStorage.getUserGroups(user.id);
         setUserGroups(groups);
-        console.log('[APP] Loaded', groups.length, 'groups from local storage');
+        console.log('[APP] Loaded', groups.length, 'groups from local storage fallback');
       } catch (localError) {
-        console.error('[APP] Local groups load also failed:', localError);
+        console.error('[APP] Both Firebase and local groups load failed:', localError);
         setUserGroups([]);
       }
     }
@@ -556,7 +600,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     logout,
     createGroup,
     joinGroup,
-    leaveGroup,
+    // leaveGroup, // Temporarily disabled
     saveAvailability,
     loadGroupAvailabilities,
     loadUserGroups,

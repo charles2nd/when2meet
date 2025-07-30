@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
+import { useApp } from '../contexts/AppContext';
 import { getWebStyle } from '../utils/webStyles';
 import { SafeHeader } from '../components/SafeHeader';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
@@ -27,13 +28,12 @@ const ModernLoginScreen: React.FC = () => {
   const [displayName, setDisplayName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [language, setLanguage] = useState<'en' | 'fr'>('en');
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const { signIn, signUp, signInGoogle, loading } = useAuth();
+  const { language, setLanguage, t } = useApp();
   const router = useRouter();
-  const t = translations[language];
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -82,11 +82,11 @@ const ModernLoginScreen: React.FC = () => {
           router.replace('/(tabs)/group');
         }, 100);
       } else {
-        Alert.alert(t.login.loginFailed, t.login.invalidCredentials);
+        console.error('[LOGIN] ❌ Login failed:', t.login.invalidCredentials);
       }
     } catch (error) {
       console.error('[LOGIN] Login error:', error);
-      Alert.alert(t.login.loginError, t.login.loginErrorMessage);
+      console.error('[LOGIN] ❌ Login error message:', t.login.loginErrorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -94,17 +94,17 @@ const ModernLoginScreen: React.FC = () => {
   
   const handleSignUp = async () => {
     if (!email.trim() || !password.trim() || !displayName.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      console.log('[SIGNUP] ❌ Missing fields: Please fill in all required fields');
       return;
     }
     
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      console.log('[SIGNUP] ❌ Password mismatch: Passwords do not match');
       return;
     }
     
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      console.log('[SIGNUP] ❌ Password too short: Password must be at least 6 characters');
       return;
     }
 
@@ -120,7 +120,7 @@ const ModernLoginScreen: React.FC = () => {
           router.replace('/(tabs)/group');
         }, 100);
       } else {
-        Alert.alert('Sign Up Failed', 'Failed to create account. Please try again.');
+        console.error('[SIGNUP] ❌ Account creation failed: Failed to create account. Please try again.');
       }
     } catch (error) {
       console.error('[SIGNUP] Sign up error:', error);
@@ -134,7 +134,7 @@ const ModernLoginScreen: React.FC = () => {
         errorMessage = 'Please enter a valid email address.';
       }
       
-      Alert.alert('Sign Up Error', errorMessage);
+      console.error('[SIGNUP] ❌ Sign up error:', errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -152,25 +152,16 @@ const ModernLoginScreen: React.FC = () => {
           router.replace('/(tabs)/group');
         }, 100);
       } else {
-        Alert.alert(t.login.googleLoginFailed, t.login.googleLoginFailedMessage);
+        console.error('[GOOGLE_LOGIN] ❌ Google login failed:', t.login.googleLoginFailedMessage);
       }
     } catch (error) {
       console.error('[LOGIN] Google login error:', error);
-      Alert.alert(t.login.googleLoginError, t.login.googleLoginErrorMessage);
+      console.error('[GOOGLE] ❌ Google login error:', t.login.googleLoginErrorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDemoLogin = () => {
-    setEmail('demo@demo.com');
-    setPassword('demo123');
-  };
-
-  const handleAdminDemo = () => {
-    setEmail('admin@admin.com');
-    setPassword('admin');
-  };
   
   const toggleAuthMode = () => {
     setIsSignUpMode(!isSignUpMode);
@@ -187,26 +178,44 @@ const ModernLoginScreen: React.FC = () => {
         subtitle="Find the perfect meeting time"
         colors={[Colors.primary, Colors.primaryDark, Colors.tactical.dark]}
       >
-        <View style={styles.logoContainer}>
-          <LinearGradient
-            colors={[Colors.accent, '#FF6F00']}
-            style={styles.logoGradient}
-          >
-            <Ionicons name="calendar" size={24} color={Colors.text.inverse} />
-          </LinearGradient>
+        <View style={styles.headerContent}>
+          <View style={styles.logoContainer}>
+            <LinearGradient
+              colors={[Colors.accent, '#FF6F00']}
+              style={styles.logoGradient}
+            >
+              <Ionicons name="calendar" size={24} color={Colors.text.inverse} />
+            </LinearGradient>
+          </View>
+          
+          {/* Language Switcher */}
+          <View style={styles.languageSwitcher}>
+            <TouchableOpacity
+              style={[styles.languageButton, language === 'en' && styles.activeLanguageButton]}
+              onPress={() => setLanguage('en')}
+            >
+              <Text style={[styles.languageButtonText, language === 'en' && styles.activeLanguageButtonText]}>EN</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.languageButton, language === 'fr' && styles.activeLanguageButton]}
+              onPress={() => setLanguage('fr')}
+            >
+              <Text style={[styles.languageButtonText, language === 'fr' && styles.activeLanguageButtonText]}>FR</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeHeader>
 
       {/* Login Form */}
       <View style={styles.formContainer}>
           <View style={styles.loginCard}>
-            <Text style={styles.loginTitle}>{isSignUpMode ? 'Create Account' : 'Welcome Back'}</Text>
-            <Text style={styles.loginSubtitle}>{isSignUpMode ? 'Sign up for a new account' : 'Sign in to your account'}</Text>
+            <Text style={styles.loginTitle}>{isSignUpMode ? t.login.createAccount : t.login.welcomeBack}</Text>
+            <Text style={styles.loginSubtitle}>{isSignUpMode ? t.login.signUpForNewAccount : t.login.signInToYourAccount}</Text>
             
             {/* Display Name Input (Sign Up Only) */}
             {isSignUpMode && (
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Display Name</Text>
+                <Text style={styles.inputLabel}>{t.login.enterDisplayName}</Text>
                 <View style={styles.inputWrapper}>
                   <Ionicons 
                     name="person-outline" 
@@ -216,7 +225,7 @@ const ModernLoginScreen: React.FC = () => {
                   />
                   <TextInput
                     style={[styles.input, getWebStyle('textInput')]}
-                    placeholder="Enter your display name"
+                    placeholder={t.login.enterDisplayName}
                     placeholderTextColor={Colors.text.tertiary}
                     value={displayName}
                     onChangeText={setDisplayName}
@@ -233,7 +242,7 @@ const ModernLoginScreen: React.FC = () => {
             
             {/* Email Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Email</Text>
+              <Text style={styles.inputLabel}>{t.login.email}</Text>
               <View style={styles.inputWrapper}>
                 <Ionicons 
                   name="mail-outline" 
@@ -243,7 +252,7 @@ const ModernLoginScreen: React.FC = () => {
                 />
                 <TextInput
                   style={[styles.input, getWebStyle('textInput')]}
-                  placeholder="Enter your email"
+                  placeholder={t.login.enterEmail}
                   placeholderTextColor={Colors.text.tertiary}
                   value={email}
                   onChangeText={setEmail}
@@ -265,7 +274,7 @@ const ModernLoginScreen: React.FC = () => {
             
             {/* Password Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Password</Text>
+              <Text style={styles.inputLabel}>{t.login.password}</Text>
               <View style={styles.inputWrapper}>
                 <Ionicons 
                   name="lock-closed-outline" 
@@ -275,7 +284,7 @@ const ModernLoginScreen: React.FC = () => {
                 />
                 <TextInput
                   style={[styles.input, styles.passwordInput, getWebStyle('textInput')]}
-                  placeholder={isSignUpMode ? "Create a password (min 6 chars)" : "Enter your password"}
+                  placeholder={isSignUpMode ? t.login.createPassword : t.login.enterPassword}
                   placeholderTextColor={Colors.text.tertiary}
                   value={password}
                   onChangeText={setPassword}
@@ -310,7 +319,7 @@ const ModernLoginScreen: React.FC = () => {
             {/* Confirm Password Input (Sign Up Only) */}
             {isSignUpMode && (
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Confirm Password</Text>
+                <Text style={styles.inputLabel}>{t.login.confirmPassword}</Text>
                 <View style={styles.inputWrapper}>
                   <Ionicons 
                     name="lock-closed-outline" 
@@ -346,11 +355,11 @@ const ModernLoginScreen: React.FC = () => {
                 style={styles.loginGradient}
               >
                 {isLoading || loading ? (
-                  <Text style={styles.loginText}>{isSignUpMode ? 'Creating Account...' : 'Signing In...'}</Text>
+                  <Text style={styles.loginText}>{isSignUpMode ? t.login.creatingAccount : t.login.signingIn}</Text>
                 ) : (
                   <>
                     <Ionicons name={isSignUpMode ? "person-add-outline" : "log-in-outline"} size={20} color={Colors.text.inverse} />
-                    <Text style={styles.loginText}>{isSignUpMode ? 'Create Account' : 'Sign In'}</Text>
+                    <Text style={styles.loginText}>{isSignUpMode ? t.login.createAccount : t.login.signIn}</Text>
                   </>
                 )}
               </LinearGradient>
@@ -363,8 +372,8 @@ const ModernLoginScreen: React.FC = () => {
               disabled={isLoading || loading}
             >
               <Text style={styles.toggleText}>
-                {isSignUpMode ? 'Already have an account? ' : 'Don\'t have an account? '}
-                <Text style={styles.toggleLink}>{isSignUpMode ? 'Sign In' : 'Sign Up'}</Text>
+                {isSignUpMode ? t.login.alreadyHaveAccount : t.login.dontHaveAccount}
+                <Text style={styles.toggleLink}>{isSignUpMode ? t.login.signIn : t.login.signUp}</Text>
               </Text>
             </TouchableOpacity>
 
@@ -382,59 +391,12 @@ const ModernLoginScreen: React.FC = () => {
               disabled={isLoading || loading}
             >
               <Ionicons name="logo-google" size={20} color={Colors.text.primary} />
-              <Text style={styles.googleText}>{isSignUpMode ? 'Sign up with Google' : 'Continue with Google'}</Text>
+              <Text style={styles.googleText}>{isSignUpMode ? t.login.signUpWithGoogle : t.login.continueWithGoogle}</Text>
             </TouchableOpacity>
 
-            {/* Firebase Setup Notice */}
-            <View style={styles.setupNotice}>
-              <View style={styles.setupHeader}>
-                <Ionicons name="information-circle" size={20} color={Colors.accent} />
-                <Text style={styles.setupTitle}>Authentication Mode</Text>
-              </View>
-              <Text style={styles.setupText}>
-                Firebase Email/Password authentication is not enabled.{' '}
-                The app is using demo authentication mode.
-              </Text>
-              <Text style={styles.setupInstructions}>
-                To enable Firebase Auth:{' '}
-                <Text style={styles.setupLink}>Firebase Console → Authentication → Sign-in method → Enable Email/Password</Text>
-              </Text>
-            </View>
-            
-            {/* Demo Buttons */}
-            <View style={styles.demoContainer}>
-              <Text style={styles.demoTitle}>Quick Demo:</Text>
-              <View style={styles.demoButtons}>
-                <TouchableOpacity 
-                  style={[styles.demoButton, getWebStyle('touchableOpacity')]} 
-                  onPress={handleDemoLogin}
-                >
-                  <Ionicons name="person-outline" size={16} color={Colors.secondary} />
-                  <Text style={styles.demoText}>User Demo</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.demoButton, styles.adminDemoButton, getWebStyle('touchableOpacity')]} 
-                  onPress={handleAdminDemo}
-                >
-                  <Ionicons name="shield-outline" size={16} color={Colors.accent} />
-                  <Text style={[styles.demoText, styles.adminDemoText]}>Admin Demo</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.demoHint}>
-                Admin: admin@admin.com / admin
-              </Text>
-              <Text style={styles.demoHint}>
-                Or any email/password for user role
-              </Text>
-              <Text style={styles.demoHint}>
-                📚 University Demo Group: TEST999
-              </Text>
-            </View>
           </View>
         </View>
       </View>
-    </View>
   );
 };
 
@@ -449,8 +411,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     alignItems: 'center',
   },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
   logoContainer: {
     marginBottom: Spacing.md,
+  },
+  languageSwitcher: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: BorderRadius.md,
+    padding: 2,
+    marginBottom: Spacing.md,
+  },
+  languageButton: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+    minWidth: 40,
+    alignItems: 'center',
+  },
+  activeLanguageButton: {
+    backgroundColor: Colors.accent,
+  },
+  languageButtonText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  activeLanguageButtonText: {
+    color: Colors.text.inverse,
   },
   logoGradient: {
     width: 60,
@@ -590,55 +583,6 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.medium,
     color: Colors.text.primary,
   },
-  demoContainer: {
-    marginTop: Spacing.md,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border.light,
-  },
-  demoTitle: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.medium,
-    color: Colors.text.secondary,
-    textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  demoButtons: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  demoButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.tactical.light,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-    gap: Spacing.xs,
-  },
-  adminDemoButton: {
-    borderColor: Colors.accent,
-    backgroundColor: 'rgba(255, 152, 0, 0.1)',
-  },
-  demoText: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.medium,
-    color: Colors.secondary,
-  },
-  adminDemoText: {
-    color: Colors.accent,
-  },
-  demoHint: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.text.tertiary,
-    textAlign: 'center',
-    lineHeight: 16,
-  },
   toggleButton: {
     alignItems: 'center',
     marginTop: Spacing.md,
@@ -653,41 +597,6 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.sm,
     color: Colors.accent,
     fontWeight: Typography.weights.bold,
-  },
-  setupNotice: {
-    backgroundColor: Colors.tactical.light,
-    borderWidth: 1,
-    borderColor: Colors.accent,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.sm,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.sm,
-  },
-  setupHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  setupTitle: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.bold,
-    color: Colors.accent,
-    marginLeft: Spacing.xs,
-  },
-  setupText: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.text.secondary,
-    lineHeight: 16,
-    marginBottom: Spacing.sm,
-  },
-  setupInstructions: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.text.tertiary,
-    lineHeight: 16,
-  },
-  setupLink: {
-    color: Colors.accent,
-    fontWeight: Typography.weights.medium,
   },
   errorText: {
     fontSize: Typography.sizes.sm,

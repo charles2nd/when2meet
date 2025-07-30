@@ -19,7 +19,7 @@ import { LocalStorage } from '../services/LocalStorage';
 import { FirebaseGroupService } from '../services/FirebaseGroupService';
 
 const GroupSettingsScreen: React.FC = () => {
-  const { user, currentGroup, setCurrentGroup, leaveGroup, t } = useApp();
+  const { user, currentGroup, setCurrentGroup, t } = useApp();
   const router = useRouter();
   const [groupName, setGroupName] = useState(currentGroup?.name || '');
   const [groupDescription, setGroupDescription] = useState('');
@@ -144,33 +144,33 @@ const GroupSettingsScreen: React.FC = () => {
       >
         <View style={styles.memberInfo}>
           <Text style={styles.memberName}>{item.name}</Text>
-          {isCurrentAdmin && <Text style={styles.ownerBadge}>OWNER</Text>}
-          {isSelf && <Text style={styles.youBadge}>YOU</Text>}
+          {isCurrentAdmin && <Text style={styles.ownerBadge}>{t.groupSettings.owner}</Text>}
+          {isSelf && <Text style={styles.youBadge}>{t.groupSettings.you}</Text>}
         </View>
         {!isSelf && !isCurrentAdmin && (
-          <Text style={styles.transferText}>Tap to transfer ownership</Text>
+          <Text style={styles.transferText}>{t.groupSettings.tapToTransferOwnership}</Text>
         )}
       </TouchableOpacity>
     );
   };
 
-  const handleLeaveGroup = () => {
-    Alert.alert(
-      'Leave Group',
-      `Are you sure you want to leave "${currentGroup?.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            await leaveGroup();
-            router.replace('/(tabs)/group');
-          }
-        }
-      ]
-    );
-  };
+  // const handleLeaveGroup = () => {
+  //   Alert.alert(
+  //     'Leave Group',
+  //     `Are you sure you want to leave "${currentGroup?.name}"?`,
+  //     [
+  //       { text: 'Cancel', style: 'cancel' },
+  //       {
+  //         text: 'Leave',
+  //         style: 'destructive',
+  //         onPress: async () => {
+  //           await leaveGroup();
+  //           router.replace('/(tabs)/group');
+  //         }
+  //       }
+  //     ]
+  //   );
+  // };
 
   if (!currentGroup) return null;
 
@@ -180,29 +180,29 @@ const GroupSettingsScreen: React.FC = () => {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Group Settings</Text>
+        <Text style={styles.title}>{t.groupSettings.title}</Text>
       </View>
 
       {/* Group Info Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Group Information</Text>
+        <Text style={styles.sectionTitle}>{t.groupSettings.groupInformation}</Text>
         
         <View style={styles.infoRow}>
-          <Text style={styles.label}>Group Name:</Text>
+          <Text style={styles.label}>{t.groupSettings.groupName}:</Text>
           {isEditing ? (
             <View style={styles.editContainer}>
               <TextInput
                 style={styles.input}
                 value={groupName}
                 onChangeText={setGroupName}
-                placeholder="Group name"
+                placeholder={t.groupSettings.groupNamePlaceholder}
                 placeholderTextColor={Colors.text.tertiary}
               />
               <TouchableOpacity onPress={handleUpdateGroupName} style={styles.saveButton}>
-                <Text style={styles.saveText}>Save</Text>
+                <Text style={styles.saveText}>{t.groupSettings.save}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => { setIsEditing(false); setGroupName(currentGroup.name); }}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{t.groupSettings.cancel}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -218,17 +218,17 @@ const GroupSettingsScreen: React.FC = () => {
         </View>
 
         <View style={styles.infoRow}>
-          <Text style={styles.label}>Group Code:</Text>
+          <Text style={styles.label}>{t.groupSettings.groupCode}:</Text>
           <Text style={styles.value}>{currentGroup.code}</Text>
         </View>
 
         <View style={styles.infoRow}>
-          <Text style={styles.label}>Members:</Text>
+          <Text style={styles.label}>{t.groupSettings.members}:</Text>
           <Text style={styles.value}>{currentGroup.members.length}</Text>
         </View>
 
         <View style={styles.infoRow}>
-          <Text style={styles.label}>Created:</Text>
+          <Text style={styles.label}>{t.groupSettings.created}:</Text>
           <Text style={styles.value}>
             {new Date(currentGroup.createdAt).toLocaleDateString()}
           </Text>
@@ -237,9 +237,9 @@ const GroupSettingsScreen: React.FC = () => {
 
       {/* Notifications Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Notifications</Text>
+        <Text style={styles.sectionTitle}>{t.groupSettings.notifications}</Text>
         <View style={styles.switchRow}>
-          <Text style={styles.label}>Push Notifications</Text>
+          <Text style={styles.label}>{t.groupSettings.pushNotifications}</Text>
           <Switch
             value={notifications}
             onValueChange={setNotifications}
@@ -252,14 +252,14 @@ const GroupSettingsScreen: React.FC = () => {
       {/* Owner Actions */}
       {isOwner && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Owner Actions</Text>
+          <Text style={styles.sectionTitle}>{t.groupSettings.ownerActions}</Text>
           
           <TouchableOpacity 
             style={[styles.actionButton, styles.primaryButton]}
             onPress={() => setShowAdminTransfer(true)}
           >
             <Ionicons name="person-add" size={20} color={Colors.text.primary} />
-            <Text style={styles.actionText}>Transfer Ownership</Text>
+            <Text style={styles.actionText}>{t.groupSettings.transferOwnership}</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -267,13 +267,13 @@ const GroupSettingsScreen: React.FC = () => {
             onPress={handleDeleteGroup}
           >
             <Ionicons name="trash" size={20} color={Colors.text.primary} />
-            <Text style={styles.actionText}>Delete Group Forever</Text>
+            <Text style={styles.actionText}>{t.groupSettings.deleteGroupForever}</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Member Actions */}
-      {!isOwner && (
+      {/* Member Actions - Leave functionality temporarily disabled */}
+      {/* {!isOwner && (
         <View style={styles.section}>
           <TouchableOpacity 
             style={[styles.actionButton, styles.warningButton]}
@@ -283,7 +283,7 @@ const GroupSettingsScreen: React.FC = () => {
             <Text style={styles.actionText}>Leave Group</Text>
           </TouchableOpacity>
         </View>
-      )}
+      )} */}
 
       {/* Admin Transfer Modal */}
       <Modal
@@ -293,14 +293,14 @@ const GroupSettingsScreen: React.FC = () => {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Transfer Ownership</Text>
+            <Text style={styles.modalTitle}>{t.groupSettings.transferOwnership}</Text>
             <TouchableOpacity onPress={() => setShowAdminTransfer(false)}>
               <Ionicons name="close" size={24} color={Colors.text.primary} />
             </TouchableOpacity>
           </View>
           
           <Text style={styles.modalDescription}>
-            Select a member to transfer group ownership to. You will lose admin privileges.
+            {t.groupSettings.selectMemberToTransfer}
           </Text>
           
           <FlatList

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,9 +7,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/theme';
 import { RESPONSIVE } from '../utils/responsive';
 import { Group } from '../models/Group';
+import { User } from '../models/User';
+import { LocalStorage } from '../services/LocalStorage';
 
 const SimpleProfileScreen: React.FC = () => {
-  const { currentGroup, userGroups, language, setLanguage, leaveGroup, loadUserGroups, t } = useApp();
+  const { currentGroup, userGroups, language, setLanguage, loadUserGroups, user, setUser, setCurrentGroup, t } = useApp();
   const { user: authUser, signOut } = useAuth();
   const router = useRouter();
 
@@ -25,28 +27,6 @@ const SimpleProfileScreen: React.FC = () => {
     setLanguage(lang);
   };
 
-  const handleLeaveGroup = async () => {
-    Alert.alert(
-      t.common.confirm,
-      `${t.profile.leaveGroupConfirm} "${currentGroup?.name}"?`,
-      [
-        { text: t.common.cancel, style: 'cancel' },
-        {
-          text: t.common.confirm,
-          onPress: async () => {
-            try {
-              await leaveGroup();
-              Alert.alert(t.common.success, t.profile.leaveGroupSuccess);
-              // Redirect to group tab after leaving
-              router.replace('/(tabs)/group');
-            } catch (error) {
-              Alert.alert(t.common.error, t.profile.leaveGroupError);
-            }
-          }
-        }
-      ]
-    );
-  };
 
   const renderGroupItem = ({ item: group }: { item: Group }) => {
     const isCurrentGroup = currentGroup?.id === group.id;
@@ -57,59 +37,81 @@ const SimpleProfileScreen: React.FC = () => {
         <View style={styles.groupHeader}>
           <View style={styles.groupInfo}>
             <Text style={styles.groupName}>{group.name}</Text>
-            <Text style={styles.groupCode}>Code: {group.code}</Text>
+            <Text style={styles.groupCode}>{t.group.code}: {group.code}</Text>
             <Text style={styles.groupMembers}>
-              {group.members.length} {group.members.length === 1 ? 'member' : 'members'}
+              {group.members.length} {group.members.length === 1 ? t.group.member : t.group.members}
             </Text>
           </View>
           <View style={styles.groupBadges}>
             {isAdmin && (
               <View style={styles.adminBadge}>
                 <Ionicons name="shield-checkmark" size={16} color={Colors.accent} />
-                <Text style={styles.adminText}>Admin</Text>
+                <Text style={styles.adminText}>{t.group.admin}</Text>
               </View>
             )}
             {isCurrentGroup && (
               <View style={styles.currentBadge}>
                 <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
-                <Text style={styles.currentText}>Current</Text>
+                <Text style={styles.currentText}>{t.group.current}</Text>
               </View>
             )}
           </View>
         </View>
         
         <Text style={styles.groupCreatedAt}>
-          Created: {new Date(group.createdAt).toLocaleDateString()}
+          {t.group.created}: {new Date(group.createdAt).toLocaleDateString()}
         </Text>
         
-        {isCurrentGroup && (
-          <TouchableOpacity 
-            style={styles.leaveGroupButton} 
-            onPress={handleLeaveGroup}
-          >
-            <Ionicons name="exit-outline" size={16} color={Colors.text.inverse} />
-            <Text style={styles.leaveGroupButtonText}>{t.profile.leaveGroup}</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.groupActions}>
+          {!isCurrentGroup && (
+            <TouchableOpacity 
+              style={styles.switchGroupButton} 
+              onPress={() => handleSwitchGroup(group)}
+            >
+              <Ionicons name="swap-horizontal" size={16} color={Colors.primary} />
+              <Text style={styles.switchGroupButtonText}>{t.group.switchToThisGroup}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   };
 
+  const handleSwitchGroup = async (group: Group) => {
+    console.log('[PROFILE] Switching to group:', group.name);
+    
+    try {
+      // Use the setCurrentGroup function from AppContext
+      setCurrentGroup(group);
+      
+      // Update user's current group
+      if (user) {
+        const updatedUser = new User({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          language: user.language,
+          groupId: group.id
+        });
+        setUser(updatedUser);
+        await LocalStorage.saveUser(updatedUser);
+      }
+      
+      console.log('[PROFILE] ✅ Successfully switched to group:', group.name);
+      
+      // Navigate to group page to show the switch
+      router.push('/(tabs)/group');
+    } catch (error) {
+      console.error('[PROFILE] ❌ Error switching group:', error);
+    }
+  };
+
   const handleLogout = async () => {
-    Alert.alert(
-      t.common.confirm,
-      t.profile.logoutConfirm,
-      [
-        { text: t.common.cancel, style: 'cancel' },
-        {
-          text: t.common.confirm,
-          onPress: async () => {
-            await signOut();
-            router.replace('/login');
-          }
-        }
-      ]
-    );
+    console.log('[PROFILE] Logout requested');
+    
+    // Direct logout without confirmation popup
+    await signOut();
+    router.replace('/login');
   };
 
   if (!authUser) {
@@ -173,7 +175,7 @@ const SimpleProfileScreen: React.FC = () => {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="people" size={20} color={Colors.primary} />
-          <Text style={styles.sectionTitle}>My Groups ({userGroups.length})</Text>
+          <Text style={styles.sectionTitle}>{t.group.myGroups} ({userGroups.length})</Text>
         </View>
         
         {userGroups.length > 0 ? (
@@ -187,8 +189,8 @@ const SimpleProfileScreen: React.FC = () => {
         ) : (
           <View style={styles.noGroupsContainer}>
             <Ionicons name="people-outline" size={48} color={Colors.text.tertiary} />
-            <Text style={styles.noGroupsText}>No groups joined yet</Text>
-            <Text style={styles.noGroupsSubtext}>Create or join a group to get started</Text>
+            <Text style={styles.noGroupsText}>{t.group.noGroupsJoinedYet}</Text>
+            <Text style={styles.noGroupsSubtext}>{t.group.createOrJoinGroup}</Text>
           </View>
         )}
       </View>
@@ -383,17 +385,19 @@ const styles = StyleSheet.create({
     color: Colors.text.tertiary,
     marginTop: RESPONSIVE.spacing.sm,
   },
-  leaveGroupButton: {
+  groupActions: {
+    marginTop: RESPONSIVE.spacing.md,
+  },
+  switchGroupButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.error,
+    backgroundColor: Colors.primary,
     paddingHorizontal: RESPONSIVE.spacing.md,
     paddingVertical: RESPONSIVE.spacing.sm,
     borderRadius: 8,
-    marginTop: RESPONSIVE.spacing.md,
     gap: RESPONSIVE.spacing.xs,
   },
-  leaveGroupButtonText: {
+  switchGroupButtonText: {
     color: Colors.text.inverse,
     fontSize: RESPONSIVE.fontSizes.sm,
     fontWeight: 'bold',

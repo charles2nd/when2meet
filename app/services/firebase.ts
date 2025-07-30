@@ -49,10 +49,10 @@ try {
 // This is a functional demo project for testing Firebase connection
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyBkLjmXg7QdlQ1kFr6H8YFXnJ2tR5sX6KE",
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "when2meet-demo.firebaseapp.com",
-  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL || "https://when2meet-demo-default-rtdb.firebaseio.com/",
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "when2meet-demo",
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "when2meet-demo.appspot.com",
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "when2meet-87a7a.firebaseapp.com",
+  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL || "https://when2meet-87a7a-default-rtdb.firebaseio.com/",
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "when2meet-87a7a",
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "when2meet-87a7a.firebasestorage.app",
   messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "445362077095",
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:445362077095:web:8f9b5c3d4e2a1b6c7d8e9f",
   measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-DEMO12345"

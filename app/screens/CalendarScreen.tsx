@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, StatusBar, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -150,10 +150,15 @@ const CalendarScreen: React.FC = () => {
             <Text style={styles.panelTitle}>SELECT DATE</Text>
           </View>
           
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dateContainer}>
-            {dates.map(date => (
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.dateContainer}
+            contentContainerStyle={styles.dateContentContainer}
+            data={dates}
+            keyExtractor={(item) => item}
+            renderItem={({ item: date }) => (
               <TouchableOpacity
-                key={date}
                 style={[
                   styles.dateButton,
                   selectedDate === date && styles.selectedDate
@@ -167,8 +172,8 @@ const CalendarScreen: React.FC = () => {
                   {new Date(date).getDate()}
                 </Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+            )}
+          />
         </View>
 
         {/* Hours Grid Panel */}
@@ -257,6 +262,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.sm,
+  },
+  dateContentContainer: {
+    paddingHorizontal: Spacing.sm,
+    gap: Spacing.sm,
   },
   dateButton: {
     width: 50,

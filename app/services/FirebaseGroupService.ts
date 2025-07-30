@@ -373,6 +373,10 @@ export class FirebaseGroupService {
     console.log('[FIREBASE_GROUP] Getting groups for user:', userId);
     
     try {
+      // First, ensure user document exists in Firebase
+      await this.ensureUserExists(userId);
+      
+      // Query groups where user is a member
       const groupsQuery = query(
         collection(db, this.GROUPS_COLLECTION),
         where('members', 'array-contains', userId)
@@ -381,10 +385,25 @@ export class FirebaseGroupService {
       const snapshot = await getDocs(groupsQuery);
       const groups = snapshot.docs.map(doc => {
         const data = doc.data();
-        return Group.fromJSON({ ...data, id: doc.id });
+        return Group.fromJSON({
+          ...data,
+          id: doc.id,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+        });
       });
       
-      console.log('[FIREBASE_GROUP] Found', groups.length, 'groups for user');
+      console.log('[FIREBASE_GROUP] ✅ Found', groups.length, 'groups for user in Firebase');
+      
+      // Update user document with current groups list for consistency
+      if (groups.length > 0) {
+        const userRef = doc(db, this.USERS_COLLECTION, userId);
+        await updateDoc(userRef, {
+          groups: groups.map(g => g.id),
+          updatedAt: serverTimestamp()
+        });
+        console.log('[FIREBASE_GROUP] Updated user document with current groups');
+      }
       
       // Cache locally (skip validation since data comes from Firebase)
       for (const group of groups) {
@@ -393,9 +412,111 @@ export class FirebaseGroupService {
       
       return groups;
     } catch (error) {
-      console.error('[FIREBASE_GROUP] Error getting user groups:', error);
-      // Fallback to local storage
+      console.error('[FIREBASE_GROUP] Error getting user groups from Firebase:', error);
+      // Fallback to local storage only as last resort
+      console.log('[FIREBASE_GROUP] Using local storage fallback...');
       return await LocalStorage.getUserGroups(userId);
+    }
+  }
+
+  /**
+   * Ensure user document exists in Firebase with current auth data
+   */
+  static async ensureUserExists(userId: string): Promise<void> {
+    try {
+      const userRef = doc(db, this.USERS_COLLECTION, userId);
+      const userDoc = await getDoc(userRef);
+      
+      if (!userDoc.exists()) {
+        console.log('[FIREBASE_GROUP] Creating user document for:', userId);
+        // Create basic user document - will be updated with real data later
+        await setDoc(userRef, {
+          id: userId,
+          groups: [],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+    } catch (error) {
+      console.error('[FIREBASE_GROUP] Error ensuring user exists:', error);
+      // Non-critical error - continue without user document
+    }
+  }
+  
+  /**
+   * Update user data in Firebase with current auth information
+   */
+  static async updateUserData(user: IUser): Promise<void> {
+    console.log('[FIREBASE_GROUP] Updating user data in Firebase:', user.id);
+    
+    try {
+      const userRef = doc(db, this.USERS_COLLECTION, user.id);
+      await setDoc(userRef, {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        language: user.language,
+        updatedAt: serverTimestamp()
+      }, { merge: true }); // merge: true preserves existing fields like groups
+      
+      console.log('[FIREBASE_GROUP] ✅ User data updated in Firebase');
+    } catch (error) {
+      console.error('[FIREBASE_GROUP] Error updating user data:', error);
+      // Non-critical error - continue without Firebase user update
+    }
+  }
+  
+  /**
+   * Add user to an existing group
+   */
+  static async addUserToGroup(groupId: string, user: IUser): Promise<void> {
+    console.log('[FIREBASE_GROUP] Adding user to group:', user.id, 'to', groupId);
+    
+    try {
+      const batch = writeBatch(db);
+      
+      // 1. Update group document - add user to members array
+      const groupRef = doc(db, this.GROUPS_COLLECTION, groupId);
+      batch.update(groupRef, {
+        members: arrayUnion(user.id),
+        memberDetails: arrayUnion({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: 'member',
+          joinedAt: new Date().toISOString()
+        }),
+        updatedAt: serverTimestamp()
+      });
+      
+      // 2. Update user document - add group to user's groups array
+      const userRef = doc(db, this.USERS_COLLECTION, user.id);
+      batch.set(userRef, {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        groups: arrayUnion(groupId),
+        currentGroupId: groupId,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      
+      // 3. Add join message to group chat
+      const messagesRef = collection(db, this.GROUPS_COLLECTION, groupId, this.MESSAGES_SUBCOLLECTION);
+      const messageRef = doc(messagesRef);
+      batch.set(messageRef, {
+        userId: 'system',
+        userName: 'System',
+        content: `${user.name} joined the group`,
+        type: 'join',
+        timestamp: serverTimestamp(),
+        readBy: []
+      });
+      
+      await batch.commit();
+      console.log('[FIREBASE_GROUP] ✅ User successfully added to group in Firebase');
+    } catch (error) {
+      console.error('[FIREBASE_GROUP] Error adding user to group:', error);
+      throw error;
     }
   }
 

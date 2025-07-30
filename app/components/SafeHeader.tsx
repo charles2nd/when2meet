@@ -29,7 +29,7 @@ export const SafeHeader: React.FC<SafeHeaderProps> = ({
         style={[
           styles.header,
           {
-            paddingTop: Math.max(insets.top + Spacing.md, 50), // Ensure minimum 50px
+            paddingTop: Math.max(insets.top + Spacing.xl, 70), // iOS guideline: minimum 70px with extra large spacing
           },
           centered && styles.headerCentered
         ]}
@@ -53,7 +53,7 @@ export const SafeHeader: React.FC<SafeHeaderProps> = ({
 
 const styles = StyleSheet.create({
   header: {
-    paddingBottom: Spacing.xl,
+    paddingBottom: Spacing.xxl, // Extra spacing for better visual hierarchy
     paddingHorizontal: Spacing.lg,
   },
   headerCentered: {

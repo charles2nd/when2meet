@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, StatusBar, Share, Alert, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, StatusBar, Share, ActivityIndicator, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -11,9 +11,11 @@ import { SafeHeader } from '../components/SafeHeader';
 import { DemoDataService } from '../services/DemoDataService';
 import { FirebaseDebug } from '../services/FirebaseDebug';
 import { Group } from '../models/Group';
+import { User } from '../models/User';
+import { LocalStorage } from '../services/LocalStorage';
 
 const GroupScreen: React.FC = () => {
-  const { user, currentGroup, userGroups, groupAvailabilities, createGroup, joinGroup, loadGroupAvailabilities, loadUserGroups, setCurrentGroup, t } = useApp();
+  const { user, currentGroup, userGroups, groupAvailabilities, createGroup, joinGroup, loadGroupAvailabilities, loadUserGroups, setCurrentGroup, setUser, t } = useApp();
   const router = useRouter();
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [modalMode, setModalMode] = useState<'list' | 'join' | 'create'>('list');
@@ -32,37 +34,29 @@ const GroupScreen: React.FC = () => {
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) {
-      Alert.alert(
-        t.group.missionFailed,
-        t.group.squadNameRequired,
-        [{ text: t.common.ok || 'OK', style: 'default' }]
-      );
+      console.log('[GROUP] ❌ Group name is required:', t.group.squadNameRequired);
       return;
     }
 
     setIsCreating(true);
     try {
+      console.log('[GROUP] Creating group:', groupName.trim());
       await createGroup(groupName.trim());
+      console.log('[GROUP] ✅ Group created successfully');
+      
       setShowGroupModal(false);
       setModalMode('list');
       setGroupName('');
       
-      Alert.alert(
-        t.group.squadDeployed,
-        t.group.squadOperational,
-        [{ 
-          text: t.group.proceedToCalendar, 
-          onPress: () => router.push('/(tabs)/calendar')
-        }]
-      );
+      // Direct navigation without popup
+      console.log('[GROUP] Navigating to calendar...');
+      router.push('/(tabs)/calendar');
     } catch (error) {
-      console.error('Error creating group:', error);
-      const errorMessage = error instanceof Error ? error.message : t.group.createSquadFailed;
-      Alert.alert(
-        t.group.missionFailed,
-        errorMessage,
-        [{ text: t.common.ok || 'OK', style: 'default' }]
-      );
+      console.error('[GROUP] ❌ Error creating group:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create group';
+      console.error('[GROUP] Error message:', errorMessage);
+      
+      // Just log the error, no popup
     } finally {
       setIsCreating(false);
     }
@@ -70,45 +64,30 @@ const GroupScreen: React.FC = () => {
 
   const handleJoinGroup = async () => {
     if (!groupCode.trim()) {
-      Alert.alert(
-        t.group.invalidInput,
-        t.group.enterSquadCode,
-        [{ text: t.common.ok || 'OK', style: 'default' }]
-      );
+      console.log('[GROUP] ❌ Invalid input:', t.group.enterSquadCode);
       return;
     }
 
     setIsJoining(true);
     try {
+      console.log('[GROUP] Joining group with code:', groupCode.trim());
       const success = await joinGroup(groupCode.trim());
       if (success) {
+        console.log('[GROUP] ✅ Successfully joined group');
         setShowGroupModal(false);
         setModalMode('list');
         setGroupCode('');
         
-        Alert.alert(
-          t.group.deploymentSuccessful,
-          t.group.welcomeOperator,
-          [{ 
-            text: t.group.proceedToCalendar, 
-            onPress: () => router.push('/(tabs)/calendar')
-          }]
-        );
+        // Direct navigation without popup
+        console.log('[GROUP] Navigating to calendar...');
+        router.push('/(tabs)/calendar');
       } else {
-        Alert.alert(
-          t.group.missionFailed,
-          t.group.squadNotFound,
-          [{ text: t.common.ok || 'OK', style: 'default' }]
-        );
+        console.error('[GROUP] ❌ Failed to join group - invalid code');
       }
     } catch (error) {
-      console.error('Error joining group:', error);
-      const errorMessage = error instanceof Error ? error.message : t.group.joinSquadFailed;
-      Alert.alert(
-        t.group.missionFailed,
-        errorMessage,
-        [{ text: t.common.ok || 'OK', style: 'default' }]
-      );
+      console.error('[GROUP] ❌ Error joining group:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to join group';
+      console.error('[GROUP] Error message:', errorMessage);
     } finally {
       setIsJoining(false);
     }
@@ -141,11 +120,7 @@ const GroupScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('[SHARE] Error sharing group:', error);
-      Alert.alert(
-        t.group.shareError,
-        t.group.shareErrorMessage,
-        [{ text: t.common.ok || 'OK', style: 'default' }]
-      );
+      console.error('[SHARE] ❌ Share error:', t.group.shareErrorMessage);
     }
   };
 
@@ -174,7 +149,10 @@ const GroupScreen: React.FC = () => {
         presentationStyle="fullScreen"
         onRequestClose={() => setShowGroupModal(false)}
       >
-        <View style={styles.modalContainer}>
+        <KeyboardAvoidingView 
+          style={styles.modalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <StatusBar barStyle="light-content" backgroundColor={Colors.tactical.dark} />
           
           {/* Header with gradient */}
@@ -413,12 +391,13 @@ const GroupScreen: React.FC = () => {
               </View>
             </View>
           )}
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     );
   };
 
-  if (!currentGroup) {
+  // Show "no groups" only if user has no groups at all
+  if (!userGroups || userGroups.length === 0) {
     return (
       <AuthGuard>
         <View style={[CommonStyles.container]}>
@@ -455,7 +434,78 @@ const GroupScreen: React.FC = () => {
     );
   }
 
-  // If user has a group, show the group interface
+  // If user has groups but no current group, show groups list (like profile page)
+  if (userGroups.length > 0 && !currentGroup) {
+    return (
+      <AuthGuard>
+        <View style={CommonStyles.container}>
+          <SafeHeader
+            title="MES GROUPES"
+            colors={[Colors.primary, Colors.primaryDark]}
+            centered={false}
+          >
+            <View style={styles.headerContent}>
+              <TouchableOpacity 
+                style={styles.headerButton}
+                onPress={openGroupModal}
+              >
+                <Ionicons name="add" size={24} color={Colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+          </SafeHeader>
+
+          {renderGroupModal()}
+
+          <ScrollView style={styles.content} contentContainerStyle={styles.compactContent}>
+            {/* Groups List */}
+            <View style={[CommonStyles.panel]}>
+              <View style={styles.panelHeader}>
+                <Ionicons name="people" size={20} color={Colors.accent} />
+                <Text style={styles.panelTitle}>MES GROUPES ({userGroups.length})</Text>
+              </View>
+              
+              {userGroups.map((group) => (
+                <View key={group.id} style={styles.groupItem}>
+                  <View style={styles.groupHeader}>
+                    <View style={styles.groupInfo}>
+                      <Text style={styles.groupName}>{group.name}</Text>
+                      <Text style={styles.groupCode}>Code: {group.code}</Text>
+                      <Text style={styles.groupMembers}>
+                        {group.members.length} {group.members.length === 1 ? 'membre' : 'membres'}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <TouchableOpacity 
+                    style={styles.selectGroupButton} 
+                    onPress={() => {
+                      setCurrentGroup(group);
+                      if (user) {
+                        const updatedUser = new User({
+                          id: user.id,
+                          name: user.name,
+                          email: user.email,
+                          language: user.language,
+                          groupId: group.id
+                        });
+                        setUser(updatedUser);
+                        LocalStorage.saveUser(updatedUser);
+                      }
+                    }}
+                  >
+                    <Ionicons name="arrow-forward" size={20} color={Colors.primary} />
+                    <Text style={styles.selectGroupButtonText}>Sélectionner</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
+      </AuthGuard>
+    );
+  }
+
+  // If user has a current group, show the group interface
   console.log('[GROUP_SCREEN] Rendering with group:', currentGroup ? {
     id: currentGroup.id,
     name: currentGroup.name,
@@ -469,17 +519,15 @@ const GroupScreen: React.FC = () => {
     squadOperationalStatus: t.group.squadOperationalStatus
   });
 
-  // Temporary debug: Simple title first
-  const debugTitle = currentGroup ? currentGroup.name : 'No Group';
-  const debugSubtitle = 'Group page loaded';
+  // Compact header with group name only
+  const compactTitle = currentGroup ? currentGroup.name : 'GROUPES';
   
   return (
     <AuthGuard>
       <View style={CommonStyles.container}>
         <SafeHeader
-          title={debugTitle}
-          subtitle={debugSubtitle}
-          colors={[Colors.secondary, Colors.secondaryDark]}
+          title={compactTitle}
+          colors={[Colors.primary, Colors.primaryDark]}
           centered={false}
         >
           <View style={styles.headerContent}>
@@ -487,7 +535,7 @@ const GroupScreen: React.FC = () => {
               style={styles.headerButton}
               onPress={openGroupModal}
             >
-              <Ionicons name="apps" size={24} color={Colors.text.primary} />
+              <Ionicons name="add" size={24} color={Colors.text.primary} />
             </TouchableOpacity>
           </View>
         </SafeHeader>
@@ -506,20 +554,7 @@ const GroupScreen: React.FC = () => {
           </View>
         )}
 
-      <ScrollView style={styles.content}>
-        {/* Simple test content */}
-        <View style={[CommonStyles.panel]}>
-          <Text style={[styles.panelTitle, { color: Colors.text.primary }]}>
-            DEBUG: Group loaded successfully!
-          </Text>
-          <Text style={{ color: Colors.text.secondary, padding: 16 }}>
-            Group Name: {currentGroup?.name || 'Unknown'}
-          </Text>
-          <Text style={{ color: Colors.text.secondary, padding: 16 }}>
-            Group Code: {currentGroup?.code || 'Unknown'}
-          </Text>
-        </View>
-
+      <ScrollView style={styles.content} contentContainerStyle={styles.compactContent}>
         {/* Group Info and Share Panel */}
         <View style={[CommonStyles.panel]}>
           <View style={styles.panelHeader}>
@@ -554,20 +589,6 @@ const GroupScreen: React.FC = () => {
           </Text>
         </View>
 
-        <View style={[CommonStyles.panel]}>
-          <View style={styles.panelHeader}>
-            <Ionicons name="today" size={20} color={Colors.accent} />
-            <Text style={styles.panelTitle}>TODAY'S TEAM SCHEDULE</Text>
-          </View>
-          
-          <Text style={styles.todayDate}>
-            {new Date().toLocaleDateString()}
-          </Text>
-        </View>
-        
-        <View style={[CommonStyles.panel]}>
-          <Text style={styles.panelTitle}>Chat coming soon...</Text>
-        </View>
       </ScrollView>
       </View>
     </AuthGuard>
@@ -577,6 +598,11 @@ const GroupScreen: React.FC = () => {
 const styles = StyleSheet.create({
   content: {
     flex: 1,
+  },
+  compactContent: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
   },
   logoContainer: {
     width: 80,
@@ -596,7 +622,7 @@ const styles = StyleSheet.create({
   panelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.sm, // Reduced from lg to sm for compact design
   },
   panelTitle: {
     fontSize: Typography.sizes.lg,
@@ -704,13 +730,13 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.medium,
   },
   groupInfoContainer: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.sm, // Reduced from lg to sm for compact design
   },
   groupCodeContainer: {
     backgroundColor: Colors.tactical.medium,
     borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
+    padding: Spacing.sm, // Reduced from md to sm for compact design
+    marginBottom: Spacing.sm, // Reduced from lg to sm for compact design
     borderWidth: 1,
     borderColor: Colors.border.medium,
     alignItems: 'center',
@@ -729,10 +755,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   shareButton: {
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm, // Reduced from md to sm for compact design
   },
   shareButtonGradient: {
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md, // Reduced from lg to md for compact design
   },
   shareButtonText: {
     fontSize: Typography.sizes.md,
@@ -993,6 +1019,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  // Group list styles (for when user has groups but no current group)
+  groupItem: {
+    backgroundColor: Colors.tactical.medium,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border.medium,
+  },
+  groupHeader: {
+    marginBottom: Spacing.sm,
+  },
+  groupInfo: {
+    flex: 1,
+  },
+  groupName: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
+    marginBottom: Spacing.xs,
+  },
+  groupCode: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.text.secondary,
+    marginBottom: Spacing.xs,
+  },
+  groupMembers: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.text.tertiary,
+  },
+  selectGroupButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.xs,
+  },
+  selectGroupButtonText: {
+    color: Colors.text.inverse,
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.bold,
   },
 });
 
