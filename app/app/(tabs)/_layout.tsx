@@ -1,12 +1,54 @@
 import { Tabs } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
 import { Colors } from '../../constants/theme';
 import { RESPONSIVE } from '../../utils/responsive';
 
 export default function TabLayout() {
-  const { t } = useApp();
+  const { user: authUser, loading } = useAuth();
+  const { t, currentGroup, user: appUser } = useApp();
+  const router = useRouter();
+  
+  // Authentication guard - redirect to login if not authenticated
+  useEffect(() => {
+    console.log('[TAB_LAYOUT] Auth check:', { user: !!authUser, loading });
+    if (!loading && !authUser) {
+      console.log('[TAB_LAYOUT] No authenticated user, redirecting to login');
+      router.replace('/login');
+    }
+  }, [authUser, loading, router]);
+  
+  // Calculate if calendar tab should be shown
+  const shouldShowCalendar = !!(currentGroup && 
+    currentGroup.id && 
+    appUser?.groupId && 
+    currentGroup.members && 
+    currentGroup.members.length > 0);
+  
+  // Debug logging to track group state
+  console.log('[TAB_LAYOUT] Current group:', currentGroup);
+  console.log('[TAB_LAYOUT] Should show calendar:', shouldShowCalendar);
+  console.log('[TAB_LAYOUT] AppUser groupId:', appUser?.groupId);
+  console.log('[TAB_LAYOUT] Group members count:', currentGroup?.members?.length);
+  
+  // Show loading screen while checking authentication
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Checking authentication...</Text>
+      </View>
+    );
+  }
+  
+  // If no user after loading, show nothing (redirect will happen)
+  if (!authUser) {
+    return null;
+  }
   
   return (
     <Tabs
@@ -30,11 +72,14 @@ export default function TabLayout() {
           fontWeight: 'bold',
         },
       }}>
+      {/* Calendar tab - hidden when user has no group */}
       <Tabs.Screen
         name="calendar"
         options={{
           title: t.tabs.calendar,
           headerShown: false,
+          // Use href: null to hide the tab when condition is false
+          href: shouldShowCalendar ? undefined : null,
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="calendar-today" size={size} color={color} />
           ),
@@ -63,3 +108,19 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: Colors.text.secondary,
+  },
+});
+
+export default TabLayout;

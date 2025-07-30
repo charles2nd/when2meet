@@ -22,6 +22,17 @@ export class LocalStorage {
     await AsyncStorage.removeItem('current_user');
   }
 
+  // Language Management
+  static async saveLanguage(language: string): Promise<void> {
+    console.log('[STORAGE] Saving language:', language);
+    await AsyncStorage.setItem('user_language', language);
+  }
+
+  static async getLanguage(): Promise<string | null> {
+    console.log('[STORAGE] Loading language...');
+    return await AsyncStorage.getItem('user_language');
+  }
+
   // Group Management
   static async saveGroup(group: Group): Promise<void> {
     console.log('[STORAGE] Saving group:', group.id);
@@ -55,6 +66,11 @@ export class LocalStorage {
     console.log('[STORAGE] Finding group by code:', code);
     const groups = await this.getAllGroups();
     return groups.find(g => g.code === code) || null;
+  }
+
+  static async removeGroup(groupId: string): Promise<void> {
+    console.log('[STORAGE] Removing group:', groupId);
+    await AsyncStorage.removeItem(`group_${groupId}`);
   }
 
   // Availability Management

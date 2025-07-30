@@ -7,7 +7,9 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "jest --watchAll"
+    "test": "jest --watchAll",
+    "verify-env": "node scripts/verify-env.js",
+    "setup": "echo '📋 Setting up When2Meet...' && echo '1. Copy .env.example to .env' && echo '2. Update .env with your Firebase config' && echo '3. Run npm run verify-env' && echo '4. Run npm start'"
   },
   "jest": {
     "preset": "jest-expo"
@@ -15,8 +17,10 @@
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
     "@react-native-async-storage/async-storage": "^2.1.2",
+    "@react-native-google-signin/google-signin": "^15.0.0",
     "@react-navigation/native": "^7.1.6",
     "expo": "~53.0.20",
+    "expo-dev-client": "^5.2.4",
     "expo-font": "~13.3.2",
     "expo-linear-gradient": "^14.1.5",
     "expo-linking": "~7.1.7",

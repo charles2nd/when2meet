@@ -3,50 +3,38 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, StatusBar 
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { FirebaseStorageService } from '../services/FirebaseStorageService';
 import { getWebStyle } from '../utils/webStyles';
-import { Team } from '../models/Team';
-import { TeamMember } from '../models/TeamMember';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useApp } from '../contexts/AppContext';
+import { SessionManager } from '../services/SessionManager';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 
 const ProfileScreen: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<TeamMember | null>(null);
-  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const router = useRouter();
   const { language, setLanguage, t } = useLanguage();
-  const { user, signOut, isAdmin } = useAuth();
+  const { user: authUser, signOut, isAdmin } = useAuth();
+  const { user: appUser, currentGroup, logout: appLogout } = useApp();
 
-  useEffect(() => {
-    loadUserData();
-  }, []);
-
-  const loadUserData = async () => {
-    try {
-      const teamResult = await FirebaseStorageService.getCurrentTeam();
-      const userIdResult = await FirebaseStorageService.getCurrentUserId();
-      
-      if (teamResult.success && teamResult.data && userIdResult.success && userIdResult.data) {
-        const team = teamResult.data;
-        setCurrentTeam(team);
-        
-        const userMember = team.members.find(m => m.id === userIdResult.data);
-        if (userMember) {
-          setCurrentUser(userMember);
-        }
-      }
-    } catch (error) {
-      Alert.alert(t.common.error, 'Failed to load profile data');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Get user data from contexts
+  console.log('[PROFILE] authUser:', authUser);
+  console.log('[PROFILE] appUser:', appUser);
+  
+  // Use authUser as primary source since it's always available when logged in
+  const user = authUser;
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Unknown Operator';
+  const userEmail = user?.email || 'No email';
+  const userRole = user?.role === 'admin' || isAdmin ? 'Squad Leader' : 'Operator';
 
   const handleLanguageChange = async (lang: 'en' | 'fr') => {
-    await setLanguage(lang);
+    try {
+      await setLanguage(lang);
+      console.log('[PROFILE] Language changed successfully to:', lang);
+    } catch (error) {
+      console.error('[PROFILE] Error changing language:', error);
+      Alert.alert('Error', 'Failed to change language. Please try again.');
+    }
   };
 
   const handleSignOut = () => {
@@ -60,8 +48,18 @@ const ProfileScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
+              // Clear app state first
+              if (appLogout) {
+                await appLogout();
+              }
+              
+              // Sign out from Firebase (this handles all cache clearing)
               await signOut();
+              
               console.log('[PROFILE] Logout completed');
+              
+              // Navigate to login page
+              router.replace('/login');
             } catch (error) {
               console.error('[PROFILE] Error during logout:', error);
             }
@@ -94,51 +92,37 @@ const ProfileScreen: React.FC = () => {
   };
 
   const handleShareTeamCode = () => {
-    if (currentTeam) {
+    if (currentGroup) {
       Alert.alert(
         'SQUAD CODE',
-        `Share this code with new recruits:\n\n${currentTeam.code}\n\nSquad: ${currentTeam.name}`,
+        `Share this code with new recruits:\n\n${currentGroup.code}\n\nSquad: ${currentGroup.name}`,
         [{ text: 'Copy Code', onPress: () => {} }]
       );
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Loading operator profile...</Text>
-      </View>
-    );
-  }
-
-  if (!currentUser || !currentTeam) {
+  if (!user) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>No active operator profile found</Text>
-        <TouchableOpacity 
-          style={[styles.button, getWebStyle('touchableOpacity')]}
-          onPress={() => router.replace('/find-group')}
-        >
-          <Text style={styles.buttonText}>Find Squad</Text>
-        </TouchableOpacity>
+        <Text style={styles.errorText}>Loading profile...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.tactical.dark} />
-      
-      {/* CS2-style header */}
-      <LinearGradient
-        colors={[Colors.primary, Colors.primaryDark]}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <View style={styles.operatorInfo}>
-            <Text style={styles.headerTitle}>OPERATOR PROFILE</Text>
-            <Text style={styles.headerSubtitle}>Tactical personnel data</Text>
-          </View>
+        <StatusBar barStyle="light-content" backgroundColor={Colors.tactical.dark} />
+        
+        {/* CS2-style header */}
+        <LinearGradient
+          colors={[Colors.primary, Colors.primaryDark]}
+          style={styles.header}
+        >
+          <View style={styles.headerContent}>
+            <View style={styles.operatorInfo}>
+              <Text style={styles.headerTitle}>OPERATOR PROFILE</Text>
+              <Text style={styles.headerSubtitle}>Tactical personnel data</Text>
+            </View>
           
           <TouchableOpacity
             style={styles.settingsButton}
@@ -159,13 +143,13 @@ const ProfileScreen: React.FC = () => {
             {/* Operator Profile */}
             <View style={styles.profilePanel}>
               <View style={styles.operatorAvatar}>
-                <Text style={styles.avatarText}>{currentUser.getInitials()}</Text>
+                <Text style={styles.avatarText}>{displayName.substring(0, 2).toUpperCase()}</Text>
               </View>
               <View style={styles.operatorDetails}>
-                <Text style={styles.operatorName}>{currentUser.name}</Text>
-                <Text style={styles.operatorEmail}>{currentUser.email}</Text>
+                <Text style={styles.operatorName}>{displayName}</Text>
+                <Text style={styles.operatorEmail}>{userEmail}</Text>
                 <View style={styles.badgeContainer}>
-                  {currentUser.isAdmin() && (
+                  {isAdmin && (
                     <View style={styles.adminBadge}>
                       <Ionicons name="shield-checkmark" size={12} color={Colors.text.inverse} />
                       <Text style={styles.adminText}>COMMANDER</Text>
@@ -186,32 +170,31 @@ const ProfileScreen: React.FC = () => {
                 <Text style={styles.panelTitle}>SQUAD INTEL</Text>
               </View>
               
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Squad Name:</Text>
-                <Text style={styles.infoValue}>{currentTeam.name}</Text>
-              </View>
-              
-              {currentTeam.description && (
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Mission:</Text>
-                  <Text style={styles.infoValue}>{currentTeam.description}</Text>
-                </View>
+              {currentGroup ? (
+                <>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Squad Name:</Text>
+                    <Text style={styles.infoValue}>{currentGroup.name}</Text>
+                  </View>
+                  
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Squad Code:</Text>
+                    <Text style={styles.infoValue}>{currentGroup.code}</Text>
+                  </View>
+                  
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Members:</Text>
+                    <Text style={styles.infoValue}>{currentGroup.members?.length || 0}</Text>
+                  </View>
+                </>
+              ) : (
+                <Text style={styles.infoValue}>No squad assigned</Text>
               )}
-              
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Squad Code:</Text>
-                <Text style={styles.infoValue}>{currentTeam.code}</Text>
-              </View>
-              
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Members:</Text>
-                <Text style={styles.infoValue}>{currentTeam.getMemberCount()}</Text>
-              </View>
               
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Deployed:</Text>
                 <Text style={styles.infoValue}>
-                  {new Date(currentUser.joinedAt).toLocaleDateString('en-US', {
+                  {new Date().toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric'
@@ -222,31 +205,35 @@ const ProfileScreen: React.FC = () => {
 
             {/* Actions */}
             <View style={styles.actionsPanel}>
-              <TouchableOpacity 
-                style={[styles.actionButton, getWebStyle('touchableOpacity')]}
-                onPress={handleShareTeamCode}
-              >
-                <LinearGradient
-                  colors={[Colors.secondary, Colors.secondaryDark]}
-                  style={styles.actionGradient}
-                >
-                  <Ionicons name="share" size={20} color={Colors.text.primary} />
-                  <Text style={styles.actionText}>SHARE SQUAD CODE</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+              {currentGroup && (
+                <>
+                  <TouchableOpacity 
+                    style={[styles.actionButton, getWebStyle('touchableOpacity')]}
+                    onPress={handleShareTeamCode}
+                  >
+                  <LinearGradient
+                    colors={[Colors.secondary, Colors.secondaryDark]}
+                    style={styles.actionGradient}
+                  >
+                    <Ionicons name="share" size={20} color={Colors.text.primary} />
+                    <Text style={styles.actionText}>SHARE SQUAD CODE</Text>
+                  </LinearGradient>
+                  </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={[styles.actionButton, getWebStyle('touchableOpacity')]}
-                onPress={handleLeaveTeam}
-              >
-                <LinearGradient
-                  colors={[Colors.error, '#D32F2F']}
-                  style={styles.actionGradient}
-                >
-                  <Ionicons name="exit" size={20} color={Colors.text.primary} />
-                  <Text style={styles.actionText}>ABANDON SQUAD</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.actionButton, getWebStyle('touchableOpacity')]}
+                    onPress={handleLeaveTeam}
+                  >
+                    <LinearGradient
+                      colors={[Colors.error, '#D32F2F']}
+                      style={styles.actionGradient}
+                    >
+                      <Ionicons name="exit" size={20} color={Colors.text.primary} />
+                      <Text style={styles.actionText}>ABANDON SQUAD</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </>
         ) : (

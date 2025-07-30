@@ -15,6 +15,7 @@ import { Colors } from '../constants/theme';
 import { RESPONSIVE } from '../utils/responsive';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { WebSocketService } from '../services/WebSocketService';
 
 interface Message {
   id: string;
@@ -30,48 +31,85 @@ const GroupChatScreen: React.FC = () => {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const wsService = useRef(WebSocketService.getInstance());
+  const messageIdCounter = useRef(0);
 
   useEffect(() => {
-    if (!currentGroup) {
+    if (!currentGroup || !user) {
       router.replace('/(tabs)/group');
       return;
     }
 
-    // Load demo messages
+    // Initialize chat with welcome message
     setMessages([
       {
         id: '1',
         userId: 'system',
         userName: 'System',
-        text: `Welcome to ${currentGroup.name} chat!`,
+        text: `Welcome to ${currentGroup.name} chat! Real-time messaging is enabled.`,
         timestamp: new Date().toISOString(),
-        groupId: currentGroup.id
-      },
-      {
-        id: '2',
-        userId: 'demo1',
-        userName: 'Player 1',
-        text: 'Hey team, when can everyone play this week?',
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-        groupId: currentGroup.id
-      },
-      {
-        id: '3',
-        userId: 'demo2',
-        userName: 'Player 2',
-        text: 'I\'m free most evenings after 7pm',
-        timestamp: new Date(Date.now() - 1800000).toISOString(),
         groupId: currentGroup.id
       }
     ]);
-  }, [currentGroup]);
 
-  const sendMessage = () => {
-    if (!messageText.trim() || !user || !currentGroup) return;
+    // Connect to WebSocket
+    const connectWebSocket = async () => {
+      try {
+        await wsService.current.connect(currentGroup.id, user.id, user.name);
+        setIsConnected(true);
+        
+        // Set up message listener
+        wsService.current.onMessage(currentGroup.id, (message: Message) => {
+          // Only add messages from other users (prevent duplicates from echo)
+          if (message.userId !== user.id) {
+            setMessages(prev => {
+              // Check if message already exists to prevent duplicates
+              const exists = prev.some(m => m.id === message.id || 
+                (m.text === message.text && m.userId === message.userId && 
+                 Math.abs(new Date(m.timestamp).getTime() - new Date(message.timestamp).getTime()) < 1000));
+              
+              if (exists) {
+                return prev;
+              }
+              
+              return [...prev, message];
+            });
+            
+            // Scroll to bottom
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 100);
+          }
+        });
+        
+      } catch (error) {
+        console.error('[CHAT] Failed to connect to WebSocket:', error);
+        Alert.alert('Connection Error', 'Unable to connect to chat server. Messages will work locally only.');
+      }
+    };
 
+    connectWebSocket();
+
+    // Cleanup function
+    return () => {
+      wsService.current.removeMessageListener(currentGroup.id);
+    };
+  }, [currentGroup, user, router]);
+
+  const sendMessage = async () => {
+    if (!messageText.trim() || !user || !currentGroup || isSending) return;
+
+    setIsSending(true);
+    
+    // Generate unique ID using counter + timestamp
+    messageIdCounter.current += 1;
+    const uniqueId = `${user.id}_${Date.now()}_${messageIdCounter.current}`;
+    
     const newMessage: Message = {
-      id: Date.now().toString(),
+      id: uniqueId,
       userId: user.id,
       userName: user.name,
       text: messageText.trim(),
@@ -79,13 +117,28 @@ const GroupChatScreen: React.FC = () => {
       groupId: currentGroup.id
     };
 
-    setMessages(prev => [...prev, newMessage]);
+    // Clear input immediately
+    const messageToSend = messageText.trim();
     setMessageText('');
+
+    // Add message locally first for immediate feedback
+    setMessages(prev => [...prev, newMessage]);
+    
+    // Send via WebSocket if connected (but don't add to local messages again)
+    if (isConnected) {
+      try {
+        wsService.current.sendChatMessage(newMessage);
+      } catch (error) {
+        console.error('[CHAT] Failed to send message:', error);
+      }
+    }
     
     // Scroll to bottom
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
+    
+    setIsSending(false);
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
@@ -133,9 +186,17 @@ const GroupChatScreen: React.FC = () => {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.groupName}>{currentGroup.name}</Text>
-          <Text style={styles.memberCount}>
-            {currentGroup.members.length} members • Code: {currentGroup.code}
-          </Text>
+          <View style={styles.statusContainer}>
+            <Text style={styles.memberCount}>
+              {currentGroup.members.length} members • Code: {currentGroup.code}
+            </Text>
+            <View style={styles.connectionStatus}>
+              <View style={[styles.statusDot, { backgroundColor: isConnected ? Colors.success : Colors.warning }]} />
+              <Text style={styles.statusText}>
+                {isConnected ? 'Connected' : 'Offline'}
+              </Text>
+            </View>
+          </View>
         </View>
         <TouchableOpacity 
           style={styles.settingsButton}
@@ -149,7 +210,7 @@ const GroupChatScreen: React.FC = () => {
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => `${item.id}_${index}`}
         style={styles.messagesList}
         contentContainerStyle={styles.messagesContent}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
@@ -168,8 +229,8 @@ const GroupChatScreen: React.FC = () => {
         />
         <TouchableOpacity 
           onPress={sendMessage} 
-          style={[styles.sendButton, !messageText.trim() && styles.sendButtonDisabled]}
-          disabled={!messageText.trim()}
+          style={[styles.sendButton, (!messageText.trim() || isSending) && styles.sendButtonDisabled]}
+          disabled={!messageText.trim() || isSending}
         >
           <Ionicons 
             name="send" 
@@ -201,6 +262,27 @@ const styles = StyleSheet.create({
   },
   headerContent: {
     flex: 1,
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: RESPONSIVE.spacing.xs,
+  },
+  connectionStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 4,
+  },
+  statusText: {
+    fontSize: RESPONSIVE.fontSizes.xs,
+    color: Colors.text.secondary,
+    fontWeight: '500',
   },
   groupName: {
     fontSize: RESPONSIVE.fontSizes.xl,

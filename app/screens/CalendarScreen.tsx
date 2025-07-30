@@ -1,14 +1,33 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../contexts/AppContext';
 import { Availability } from '../models/SimpleAvailability';
+import { Colors, Typography, Spacing, BorderRadius, CommonStyles, HeaderStyles } from '../theme';
+import { getWebStyle } from '../utils/webStyles';
+import { AuthGuard } from '../components/AuthGuard';
+
+// Simple debounce utility
+const debounce = (func: Function, wait: number) => {
+  let timeout: NodeJS.Timeout;
+  return function executedFunction(...args: any[]) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+};
 
 const CalendarScreen: React.FC = () => {
-  const { user, currentGroup, myAvailability, saveAvailability, t } = useApp();
+  const { user, currentGroup, myAvailability, saveAvailability, loadGroupAvailabilities, t } = useApp();
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [availability, setAvailability] = useState<Availability | null>(null);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
 
   useEffect(() => {
     // Redirect to group page if user has no group
@@ -45,28 +64,63 @@ const CalendarScreen: React.FC = () => {
   };
 
   const toggleTimeSlot = (date: string, hour: number) => {
-    if (!availability) return;
+    if (!availability || !currentGroup || isUpdating) return;
     
+    console.log('[CALENDAR] Toggling availability for', date, hour);
+    
+    // Update local state immediately for instant UI feedback
     const isAvailable = availability.getSlot(date, hour);
     availability.setSlot(date, hour, !isAvailable);
     setAvailability({...availability});
+    
+    
+    // Debounced save to prevent excessive calls
+    saveAvailabilityDebounced(availability);
   };
 
-  const handleSave = async () => {
+  // Debounced save function to prevent multiple rapid saves
+  const saveAvailabilityDebounced = useCallback(
+    debounce(async (availabilityData: Availability) => {
+      if (!availabilityData || !currentGroup) return;
+      
+      setIsUpdating(true);
+      try {
+        await saveAvailability(availabilityData);
+        await loadGroupAvailabilities();
+        console.log('[CALENDAR] Availability auto-saved and refreshed');
+      } catch (error) {
+        console.error('[CALENDAR] Error saving availability:', error);
+      } finally {
+        setIsUpdating(false);
+      }
+    }, 500), // 500ms debounce
+    [saveAvailability, loadGroupAvailabilities, currentGroup]
+  );
+
+  const handleManualSave = async () => {
     if (!availability || !currentGroup) {
       Alert.alert(t.common.error, t.calendar.noGroup);
       return;
     }
 
-    await saveAvailability(availability);
-    Alert.alert(t.common.success, t.calendar.saved);
+    try {
+      setIsUpdating(true);
+      await saveAvailability(availability);
+      await loadGroupAvailabilities();
+      Alert.alert(t.common.success, t.calendar.saved);
+    } catch (error) {
+      console.error('[CALENDAR] Manual save error:', error);
+      Alert.alert(t.common.error, 'Failed to save availability');
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   // This should not render anymore due to redirect, but keeping as fallback
   if (!currentGroup) {
     return (
       <View style={styles.container}>
-        <Text style={styles.noGroupText}>Redirecting to group page...</Text>
+        <Text style={styles.noGroupText}>{t.calendar.redirecting}</Text>
       </View>
     );
   }
@@ -75,149 +129,196 @@ const CalendarScreen: React.FC = () => {
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>{t.calendar.title}</Text>
-      <Text style={styles.subtitle}>{t.calendar.selectDate}</Text>
+    <AuthGuard>
+      <View style={[CommonStyles.container]}>
+        <StatusBar barStyle="light-content" backgroundColor={Colors.tactical.dark} />
+        
+        {/* CS2 Header */}
+        <LinearGradient
+          colors={[Colors.secondary, Colors.secondaryDark]}
+          style={HeaderStyles.headerCenter}
+        >
+          <View style={styles.logoContainer}>
+            <Ionicons name="calendar-outline" size={32} color={Colors.accent} />
+          </View>
+          <Text style={HeaderStyles.headerTitle}>MISSION CALENDAR</Text>
+          <Text style={HeaderStyles.headerSubtitle}>Set your operational availability</Text>
+        </LinearGradient>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={styles.dateContainer}>
-          {dates.map(date => (
-            <TouchableOpacity
-              key={date}
-              style={[
-                styles.dateButton,
-                selectedDate === date && styles.selectedDate
-              ]}
-              onPress={() => setSelectedDate(date)}
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Date Selection Panel */}
+        <View style={[CommonStyles.panel]}>
+          <View style={styles.panelHeader}>
+            <Ionicons name="calendar" size={20} color={Colors.accent} />
+            <Text style={styles.panelTitle}>SELECT DATE</Text>
+          </View>
+          
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dateContainer}>
+            {dates.map(date => (
+              <TouchableOpacity
+                key={date}
+                style={[
+                  styles.dateButton,
+                  selectedDate === date && styles.selectedDate
+                ]}
+                onPress={() => setSelectedDate(date)}
+              >
+                <Text style={[
+                  styles.dateText,
+                  selectedDate === date && styles.selectedDateText
+                ]}>
+                  {new Date(date).getDate()}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Hours Grid Panel */}
+        {selectedDate && availability && (
+          <View style={[CommonStyles.panel]}>
+            <View style={styles.panelHeader}>
+              <Ionicons name="time" size={20} color={Colors.accent} />
+              <Text style={styles.panelTitle}>AVAILABILITY HOURS</Text>
+            </View>
+            
+            <View style={styles.hoursGrid}>
+              {hours.map(hour => {
+                const isAvailable = availability.getSlot(selectedDate, hour);
+                return (
+                  <TouchableOpacity
+                    key={hour}
+                    style={[
+                      styles.hourButton,
+                      isAvailable && styles.availableHour,
+                      getWebStyle('touchableOpacity')
+                    ]}
+                    onPress={() => toggleTimeSlot(selectedDate, hour)}
+                  >
+                    <Text style={[
+                      styles.hourText,
+                      isAvailable && styles.availableHourText
+                    ]}>
+                      {hour.toString().padStart(2, '0')}:00
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* Save Button */}
+        <View style={styles.saveContainer}>
+          <TouchableOpacity 
+            style={[CommonStyles.buttonBase, getWebStyle('touchableOpacity')]}
+            onPress={handleManualSave}
+          >
+            <LinearGradient
+              colors={[Colors.primary, Colors.primaryDark]}
+              style={CommonStyles.buttonGradient}
             >
-              <Text style={styles.dateText}>
-                {new Date(date).getDate()}
-              </Text>
-            </TouchableOpacity>
-          ))}
+              <Ionicons name="save-outline" size={20} color={Colors.text.primary} />
+              <Text style={CommonStyles.buttonText}>{t.calendar.save}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
       </ScrollView>
-
-      {selectedDate && availability && (
-        <View style={styles.hoursContainer}>
-          <Text style={styles.hoursTitle}>{t.calendar.hours}</Text>
-          <View style={styles.hoursGrid}>
-            {hours.map(hour => {
-              const isAvailable = availability.getSlot(selectedDate, hour);
-              return (
-                <TouchableOpacity
-                  key={hour}
-                  style={[
-                    styles.hourButton,
-                    isAvailable && styles.availableHour
-                  ]}
-                  onPress={() => toggleTimeSlot(selectedDate, hour)}
-                >
-                  <Text style={[
-                    styles.hourText,
-                    isAvailable && styles.availableHourText
-                  ]}>
-                    {hour}:00
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      )}
-
-      <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-        <Text style={styles.saveButtonText}>{t.calendar.save}</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      </View>
+    </AuthGuard>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  content: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    padding: 20,
-    paddingBottom: 5,
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+    borderWidth: 2,
+    borderColor: Colors.accent,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+  panelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
   },
-  noGroupText: {
-    fontSize: 18,
-    textAlign: 'center',
-    marginTop: 50,
-    color: '#666',
+  panelTitle: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
+    marginLeft: Spacing.sm,
+    letterSpacing: 1,
   },
   dateContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingVertical: Spacing.md,
   },
   dateButton: {
     width: 50,
     height: 50,
-    borderRadius: 25,
-    backgroundColor: 'white',
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.tactical.medium,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: Spacing.md,
+    borderWidth: 2,
+    borderColor: Colors.border.medium,
   },
   selectedDate: {
-    backgroundColor: '#007AFF',
+    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
   },
   dateText: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: Typography.sizes.md,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
   },
-  hoursContainer: {
-    padding: 20,
-  },
-  hoursTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
+  selectedDateText: {
+    color: Colors.text.inverse,
   },
   hoursGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: Spacing.xs,
   },
   hourButton: {
     width: '23%',
-    padding: 10,
-    margin: '1%',
-    backgroundColor: 'white',
-    borderRadius: 8,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.tactical.medium,
     alignItems: 'center',
+    minHeight: 50,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border.medium,
   },
   availableHour: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: Colors.success,
+    borderColor: Colors.success,
   },
   hourText: {
-    fontSize: 14,
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.secondary,
   },
   availableHourText: {
-    color: 'white',
-    fontWeight: 'bold',
+    color: Colors.text.primary,
   },
-  saveButton: {
-    backgroundColor: '#007AFF',
-    margin: 20,
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
+  saveContainer: {
+    padding: Spacing.lg,
   },
-  saveButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  noGroupText: {
+    fontSize: Typography.sizes.lg,
+    textAlign: 'center',
+    marginTop: 50,
+    color: Colors.text.secondary,
   },
 });
 

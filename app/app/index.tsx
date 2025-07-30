@@ -1,48 +1,47 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
+import { Colors } from '../constants/theme';
 
 const IndexScreen: React.FC = () => {
-  const { user, loading, logoutTrigger, loginTrigger } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
+  const [redirected, setRedirected] = useState(false);
 
   useEffect(() => {
-    console.log('[INDEX] Auth state changed:', { user: !!user, loading, userEmail: user?.email });
-    // Wait for loading to complete before navigating
-    if (!loading) {
+    console.log('[INDEX] ========================================');
+    console.log('[INDEX] AUTH STATE CHECK');
+    console.log('[INDEX] ========================================');
+    console.log('[INDEX] User authenticated:', !!user);
+    console.log('[INDEX] Auth loading:', loading);
+    console.log('[INDEX] User email:', user?.email || 'none');
+    console.log('[INDEX] ========================================');
+    
+    if (!loading && !redirected) {
+      setRedirected(true);
+      
       if (user) {
-        console.log('[INDEX] User authenticated, navigating to tabs:', user.email);
-        router.replace('/(tabs)/calendar');
+        console.log('[INDEX] 🔄 Redirecting authenticated user to GroupScreen');
+        router.replace('/(tabs)/group');
       } else {
-        console.log('[INDEX] No authenticated user, navigating to login');
+        console.log('[INDEX] 🔄 Redirecting unauthenticated user to login');
         router.replace('/login');
       }
     }
-  }, [user, loading, router]);
-
-  // Handle logout trigger - force navigation to login
-  useEffect(() => {
-    if (logoutTrigger > 0) {
-      console.log('[INDEX] Logout triggered, forcing navigation to login');
-      router.replace('/login');
-    }
-  }, [logoutTrigger, router]);
-
-  // Handle login trigger - force navigation to tabs
-  useEffect(() => {
-    if (loginTrigger > 0 && user) {
-      console.log('[INDEX] Login triggered, forcing navigation to tabs');
-      router.replace('/(tabs)/calendar');
-    }
-  }, [loginTrigger, user, router]);
+  }, [user, loading, router, redirected]);
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#007AFF" />
+      <ActivityIndicator size="large" color={Colors.primary} />
       <Text style={styles.text}>
-        {loading ? 'Loading authentication...' : 'Initializing...'}
+        {loading ? 'Checking authentication...' : 'Redirecting...'}
       </Text>
+      {user && (
+        <Text style={styles.userText}>
+          Welcome back, {user.email}
+        </Text>
+      )}
     </View>
   );
 };
@@ -52,12 +51,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: Colors.background.primary,
   },
   text: {
     marginTop: 10,
     fontSize: 16,
-    color: '#666',
+    color: Colors.text.secondary,
+  },
+  userText: {
+    marginTop: 5,
+    fontSize: 14,
+    color: Colors.text.primary,
+    fontWeight: '500',
   },
 });
 

@@ -2,11 +2,13 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/theme';
 import { RESPONSIVE } from '../utils/responsive';
 
 const SimpleProfileScreen: React.FC = () => {
-  const { user, currentGroup, language, setLanguage, leaveGroup, logout, t } = useApp();
+  const { currentGroup, language, setLanguage, leaveGroup, t } = useApp();
+  const { user: authUser, signOut } = useAuth();
   const router = useRouter();
 
   const handleLanguageChange = (lang: 'en' | 'fr') => {
@@ -17,7 +19,7 @@ const SimpleProfileScreen: React.FC = () => {
   const handleLeaveGroup = async () => {
     Alert.alert(
       t.common.confirm,
-      `Are you sure you want to leave "${currentGroup?.name}"?`,
+      `${t.profile.leaveGroupConfirm} "${currentGroup?.name}"?`,
       [
         { text: t.common.cancel, style: 'cancel' },
         {
@@ -25,11 +27,11 @@ const SimpleProfileScreen: React.FC = () => {
           onPress: async () => {
             try {
               await leaveGroup();
-              Alert.alert(t.common.success, 'You have successfully left the group');
+              Alert.alert(t.common.success, t.profile.leaveGroupSuccess);
               // Redirect to group tab after leaving
               router.replace('/(tabs)/group');
             } catch (error) {
-              Alert.alert(t.common.error, 'Failed to leave group. Please try again.');
+              Alert.alert(t.common.error, t.profile.leaveGroupError);
             }
           }
         }
@@ -40,13 +42,13 @@ const SimpleProfileScreen: React.FC = () => {
   const handleLogout = async () => {
     Alert.alert(
       t.common.confirm,
-      'Are you sure you want to logout?',
+      t.profile.logoutConfirm,
       [
         { text: t.common.cancel, style: 'cancel' },
         {
           text: t.common.confirm,
           onPress: async () => {
-            await logout();
+            await signOut();
             router.replace('/login');
           }
         }
@@ -54,10 +56,10 @@ const SimpleProfileScreen: React.FC = () => {
     );
   };
 
-  if (!user) {
+  if (!authUser) {
     return (
       <View style={styles.container}>
-        <Text>No user logged in</Text>
+        <Text style={styles.noUserText}>{t.profile.noUserLoggedIn}</Text>
       </View>
     );
   }
@@ -68,12 +70,12 @@ const SimpleProfileScreen: React.FC = () => {
 
       <View style={styles.section}>
         <Text style={styles.label}>{t.profile.name}</Text>
-        <Text style={styles.value}>{user.name}</Text>
+        <Text style={styles.value}>{authUser.name || authUser.displayName || 'User'}</Text>
       </View>
 
       <View style={styles.section}>
         <Text style={styles.label}>{t.profile.email}</Text>
-        <Text style={styles.value}>{user.email}</Text>
+        <Text style={styles.value}>{authUser.email}</Text>
       </View>
 
       <View style={styles.section}>
@@ -115,7 +117,7 @@ const SimpleProfileScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.label}>{t.profile.currentGroup}</Text>
           <Text style={styles.value}>{currentGroup.name}</Text>
-          <Text style={styles.groupCode}>Code: {currentGroup.code}</Text>
+          <Text style={styles.groupCode}>{t.profile.groupCode}: {currentGroup.code}</Text>
           
           <TouchableOpacity 
             style={styles.leaveButton} 
@@ -224,6 +226,12 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     fontSize: RESPONSIVE.fontSizes.lg,
     fontWeight: 'bold',
+  },
+  noUserText: {
+    color: Colors.text.secondary,
+    fontSize: RESPONSIVE.fontSizes.lg,
+    textAlign: 'center',
+    marginTop: RESPONSIVE.spacing.xl,
   },
 });
 

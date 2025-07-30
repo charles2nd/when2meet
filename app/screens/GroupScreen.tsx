@@ -1,266 +1,474 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, StatusBar, Share, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { useApp } from '../contexts/AppContext';
-import GroupChatScreen from './GroupChatScreen';
+import { Colors, Typography, Spacing, BorderRadius, CommonStyles, HeaderStyles } from '../theme';
+import { getWebStyle } from '../utils/webStyles';
+import { AuthGuard } from '../components/AuthGuard';
+import { DemoDataService } from '../services/DemoDataService';
 
 const GroupScreen: React.FC = () => {
   const { user, currentGroup, groupAvailabilities, createGroup, joinGroup, loadGroupAvailabilities, t } = useApp();
+  const router = useRouter();
   const [showJoinForm, setShowJoinForm] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [groupCode, setGroupCode] = useState('');
   const [groupName, setGroupName] = useState('');
-  const [selectedDate, setSelectedDate] = useState<string>('');
-
   useEffect(() => {
     if (currentGroup) {
+      console.log('[GROUP] Loading group availabilities...');
       loadGroupAvailabilities();
     }
   }, [currentGroup]);
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) {
-      Alert.alert(t.common.error, 'Please enter a group name');
       return;
     }
 
-    const group = await createGroup(groupName.trim());
-    Alert.alert(t.common.success, `Group created! Code: ${group.code}`);
-    setShowCreateForm(false);
-    setGroupName('');
+    try {
+      await createGroup(groupName.trim());
+      setShowCreateForm(false);
+      setGroupName('');
+      
+      
+      router.push('/(tabs)/calendar');
+    } catch (error) {
+      console.error('Error creating group:', error);
+    }
   };
 
   const handleJoinGroup = async () => {
     if (!groupCode.trim()) {
-      Alert.alert(t.common.error, 'Please enter a group code');
       return;
     }
 
-    const success = await joinGroup(groupCode.trim());
-    if (success) {
-      Alert.alert(t.common.success, 'Successfully joined group!');
-      setShowJoinForm(false);
-      setGroupCode('');
-    } else {
-      Alert.alert(t.common.error, 'Group not found');
-    }
-  };
-
-  const getDatesForMonth = () => {
-    const dates = [];
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
-    
-    for (let day = 1; day <= 31; day++) {
-      const date = new Date(year, month, day);
-      if (date.getMonth() === month) {
-        dates.push(date.toISOString().split('T')[0]);
+    try {
+      const success = await joinGroup(groupCode.trim());
+      if (success) {
+        setShowJoinForm(false);
+        setGroupCode('');
+        
+        
+        router.push('/(tabs)/calendar');
+      } else {
       }
+    } catch (error) {
+      console.error('Error joining group:', error);
     }
-    
-    return dates;
   };
 
-  const getAvailabilityCount = (date: string, hour: number): number => {
-    return groupAvailabilities.filter(availability => 
-      availability.getSlot(date, hour)
-    ).length;
+  const handleShareGroup = async () => {
+    if (!currentGroup) return;
+
+    try {
+      const shareMessage = `🎯 ${t.group.inviteMessage}\n\n` +
+        `${t.group.squadNameLabel}: ${currentGroup.name}\n` +
+        `${t.group.groupCodeLabel}: ${currentGroup.code}\n\n` +
+        `${t.group.shareInstructions}`;
+
+      const shareOptions = {
+        message: shareMessage,
+        title: `${t.group.shareTitle} ${currentGroup.name}`,
+      };
+
+      const result = await Share.share(shareOptions);
+
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          console.log('[SHARE] Shared via:', result.activityType);
+        } else {
+          console.log('[SHARE] Group shared successfully');
+        }
+      } else if (result.action === Share.dismissedAction) {
+        console.log('[SHARE] Share dismissed');
+      }
+    } catch (error) {
+      console.error('[SHARE] Error sharing group:', error);
+      Alert.alert(
+        t.group.shareError,
+        t.group.shareErrorMessage,
+        [{ text: t.common.ok || 'OK', style: 'default' }]
+      );
+    }
   };
 
-  const getHeatMapColor = (count: number, total: number): string => {
-    if (count === 0) return '#f5f5f5';
-    const percentage = count / total;
-    if (percentage >= 0.8) return '#4CAF50';
-    if (percentage >= 0.6) return '#8BC34A';
-    if (percentage >= 0.4) return '#FFC107';
-    if (percentage >= 0.2) return '#FF9800';
-    return '#FFEB3B';
-  };
+
 
   if (!currentGroup) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>{t.group.noGroup}</Text>
-        
-        {!showJoinForm && !showCreateForm && (
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={styles.button} 
-              onPress={() => setShowJoinForm(true)}
-            >
-              <Text style={styles.buttonText}>{t.group.joinGroup}</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.button} 
-              onPress={() => setShowCreateForm(true)}
-            >
-              <Text style={styles.buttonText}>{t.group.createGroup}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+      <AuthGuard>
+        <View style={[CommonStyles.container]}>
+          <StatusBar barStyle="light-content" backgroundColor={Colors.tactical.dark} />
+          
+          {/* CS2 Header */}
+          <LinearGradient
+            colors={[Colors.primary, Colors.primaryDark]}
+            style={HeaderStyles.headerCenter}
+          >
+            <View style={styles.logoContainer}>
+              <Ionicons name="people-outline" size={32} color={Colors.accent} />
+            </View>
+            <Text style={HeaderStyles.headerTitle}>SQUAD DEPLOYMENT</Text>
+            <Text style={HeaderStyles.headerSubtitle}>Join or create your tactical unit</Text>
+          </LinearGradient>
 
-        {showJoinForm && (
-          <View style={styles.form}>
-            <TextInput
-              style={styles.input}
-              placeholder={t.group.enterCode}
-              value={groupCode}
-              onChangeText={setGroupCode}
-              autoCapitalize="characters"
-            />
-            <TouchableOpacity style={styles.button} onPress={handleJoinGroup}>
-              <Text style={styles.buttonText}>{t.group.joinGroup}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowJoinForm(false)}>
-              <Text style={styles.cancelText}>{t.common.cancel}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {!showJoinForm && !showCreateForm && (
+            <View style={styles.optionsContainer}>
+              <TouchableOpacity 
+                style={[CommonStyles.buttonBase, getWebStyle('touchableOpacity')]}
+                onPress={() => setShowJoinForm(true)}
+              >
+                <LinearGradient
+                  colors={[Colors.secondary, Colors.secondaryDark]}
+                  style={CommonStyles.buttonGradient}
+                >
+                  <Ionicons name="enter-outline" size={20} color={Colors.text.primary} />
+                  <Text style={CommonStyles.buttonText}>{t.group.joinGroupButton}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[CommonStyles.buttonBase, getWebStyle('touchableOpacity')]}
+                onPress={() => setShowCreateForm(true)}
+              >
+                <LinearGradient
+                  colors={[Colors.primary, Colors.primaryDark]}
+                  style={CommonStyles.buttonGradient}
+                >
+                  <Ionicons name="add-circle-outline" size={20} color={Colors.text.primary} />
+                  <Text style={CommonStyles.buttonText}>{t.group.createGroupButton}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          )}
 
-        {showCreateForm && (
-          <View style={styles.form}>
-            <TextInput
-              style={styles.input}
-              placeholder={t.group.groupName}
-              value={groupName}
-              onChangeText={setGroupName}
-            />
-            <TouchableOpacity style={styles.button} onPress={handleCreateGroup}>
-              <Text style={styles.buttonText}>{t.group.createGroup}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowCreateForm(false)}>
-              <Text style={styles.cancelText}>{t.common.cancel}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+          {showJoinForm && (
+            <View style={[CommonStyles.panel]}>
+              <View style={styles.panelHeader}>
+                <Ionicons name="shield-checkmark" size={20} color={Colors.accent} />
+                <Text style={styles.panelTitle}>SQUAD CODE</Text>
+              </View>
+              
+              <TextInput
+                style={[CommonStyles.input, getWebStyle('textInput')]}
+                placeholder={t.group.enterCode}
+                placeholderTextColor={Colors.text.tertiary}
+                value={groupCode}
+                onChangeText={setGroupCode}
+                autoCapitalize="characters"
+              />
+              
+              <TouchableOpacity 
+                style={[CommonStyles.buttonBase, getWebStyle('touchableOpacity')]}
+                onPress={handleJoinGroup}
+              >
+                <LinearGradient
+                  colors={[Colors.secondary, Colors.secondaryDark]}
+                  style={CommonStyles.buttonGradient}
+                >
+                  <Ionicons name="rocket-outline" size={20} color={Colors.text.primary} />
+                  <Text style={CommonStyles.buttonText}>{t.group.deployToSquad}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              
+              <TouchableOpacity onPress={() => setShowJoinForm(false)} style={styles.cancelButton}>
+                <Text style={styles.cancelText}>{t.group.goBack}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {showCreateForm && (
+            <View style={[CommonStyles.panel]}>
+              <View style={styles.panelHeader}>
+                <Ionicons name="flag" size={20} color={Colors.accent} />
+                <Text style={styles.panelTitle}>SQUAD CREATION</Text>
+              </View>
+              
+              <TextInput
+                style={[CommonStyles.input, getWebStyle('textInput')]}
+                placeholder={t.group.groupName}
+                placeholderTextColor={Colors.text.tertiary}
+                value={groupName}
+                onChangeText={setGroupName}
+              />
+              
+              <TouchableOpacity 
+                style={[CommonStyles.buttonBase, getWebStyle('touchableOpacity')]}
+                onPress={handleCreateGroup}
+              >
+                <LinearGradient
+                  colors={[Colors.primary, Colors.primaryDark]}
+                  style={CommonStyles.buttonGradient}
+                >
+                  <Ionicons name="add" size={20} color={Colors.text.primary} />
+                  <Text style={CommonStyles.buttonText}>{t.group.establishSquad}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              
+              <TouchableOpacity onPress={() => setShowCreateForm(false)} style={styles.cancelButton}>
+                <Text style={styles.cancelText}>{t.group.goBack}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+        </View>
+      </AuthGuard>
     );
   }
 
-  // If user has a group, show the chat screen
-  return <GroupChatScreen />;
+  // If user has a group, show the group interface
+  return (
+    <AuthGuard>
+      <View style={CommonStyles.container}>
+        <StatusBar barStyle="light-content" backgroundColor={Colors.tactical.dark} />
+        
+        <LinearGradient
+          colors={[Colors.secondary, Colors.secondaryDark]}
+          style={HeaderStyles.headerCenter}
+        >
+          <Text style={HeaderStyles.headerTitle}>
+            {DemoDataService.isDemoGroup(currentGroup.code) ? t.group.demoGroup : currentGroup.name}
+          </Text>
+          <Text style={HeaderStyles.headerSubtitle}>
+            {DemoDataService.isDemoGroup(currentGroup.code) ? t.group.observerMode : t.group.squadOperationalStatus}
+          </Text>
+        </LinearGradient>
+
+        {/* Demo Notice */}
+        {DemoDataService.isDemoGroup(currentGroup.code) && (
+          <View style={[CommonStyles.panel, styles.demoNotice]}>
+            <View style={styles.panelHeader}>
+              <Ionicons name="information-circle" size={20} color={Colors.accent} />
+              <Text style={styles.panelTitle}>{t.group.demoGroup}</Text>
+            </View>
+            <Text style={styles.demoText}>{t.group.demoNotice}</Text>
+            <Text style={styles.demoCode}>Group Code: {currentGroup.code}</Text>
+          </View>
+        )}
+
+      <ScrollView style={styles.content}>
+        {/* Group Info and Share Panel */}
+        <View style={[CommonStyles.panel]}>
+          <View style={styles.panelHeader}>
+            <Ionicons name="people" size={20} color={Colors.accent} />
+            <Text style={styles.panelTitle}>SQUAD INFORMATION</Text>
+          </View>
+          
+          <View style={styles.groupInfoContainer}>
+            <View style={styles.groupCodeContainer}>
+              <Text style={styles.groupCodeLabel}>{t.group.groupCodeLabel || 'Squad Code'}:</Text>
+              <Text style={styles.groupCodeValue}>{currentGroup.code}</Text>
+            </View>
+            
+            <TouchableOpacity 
+              style={[CommonStyles.buttonBase, styles.shareButton, getWebStyle('touchableOpacity')]}
+              onPress={handleShareGroup}
+            >
+              <LinearGradient
+                colors={[Colors.accent, '#FF8F00']}
+                style={[CommonStyles.buttonGradient, styles.shareButtonGradient]}
+              >
+                <Ionicons name="share-outline" size={20} color={Colors.text.inverse} />
+                <Text style={[CommonStyles.buttonText, styles.shareButtonText]}>
+                  {t.group.inviteMembers || 'INVITE SQUAD MEMBERS'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+          
+          <Text style={styles.memberSummary}>
+            Team members: {currentGroup.members?.length || 0}
+          </Text>
+        </View>
+
+        <View style={[CommonStyles.panel]}>
+          <View style={styles.panelHeader}>
+            <Ionicons name="today" size={20} color={Colors.accent} />
+            <Text style={styles.panelTitle}>TODAY'S TEAM SCHEDULE</Text>
+          </View>
+          
+          <Text style={styles.todayDate}>
+            {new Date().toLocaleDateString()}
+          </Text>
+        </View>
+        
+        <View style={[CommonStyles.panel]}>
+          <Text style={styles.panelTitle}>Chat coming soon...</Text>
+        </View>
+      </ScrollView>
+      </View>
+    </AuthGuard>
+  );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  content: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    padding: 20,
-    paddingBottom: 5,
-  },
-  subtitle: {
-    fontSize: 16,
-    paddingHorizontal: 20,
-    paddingBottom: 5,
-    color: '#666',
-  },
-  buttonContainer: {
-    padding: 20,
-  },
-  button: {
-    backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  form: {
-    padding: 20,
-  },
-  input: {
-    backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 15,
-    fontSize: 16,
-  },
-  cancelText: {
-    textAlign: 'center',
-    color: '#007AFF',
-    marginTop: 10,
-    fontSize: 16,
-  },
-  dateContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  dateButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'white',
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginBottom: Spacing.md,
+    borderWidth: 2,
+    borderColor: Colors.accent,
   },
-  selectedDate: {
-    backgroundColor: '#007AFF',
+  optionsContainer: {
+    padding: Spacing.lg,
+    gap: Spacing.md,
   },
-  dateText: {
-    fontSize: 16,
-    fontWeight: 'bold',
+  panelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
   },
-  heatMapContainer: {
-    padding: 20,
+  panelTitle: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
+    marginLeft: Spacing.sm,
+    letterSpacing: 1,
   },
-  heatMapTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
+  cancelButton: {
+    alignItems: 'center',
+    marginTop: Spacing.md,
+    padding: Spacing.sm,
   },
-  hoursGrid: {
+  cancelText: {
+    color: Colors.text.secondary,
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.medium,
+  },
+  demoNotice: {
+    backgroundColor: Colors.tactical.medium,
+    borderColor: Colors.accent,
+    borderWidth: 1,
+    marginHorizontal: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  demoText: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.text.secondary,
+    marginBottom: Spacing.sm,
+    lineHeight: 20,
+  },
+  demoCode: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.accent,
+    fontWeight: Typography.weights.bold,
+    textAlign: 'center',
+    letterSpacing: 2,
+  },
+  todayDate: {
+    fontSize: Typography.sizes.lg,
+    color: Colors.text.primary,
+    fontWeight: Typography.weights.bold,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+    letterSpacing: 0.5,
+  },
+  teamMembersContainer: {
+    gap: Spacing.md,
+  },
+  memberCard: {
+    backgroundColor: Colors.tactical.medium,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border.medium,
+  },
+  memberHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  memberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.md,
+  },
+  memberInitial: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.inverse,
+  },
+  memberName: {
+    fontSize: Typography.sizes.md,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
+    flex: 1,
+  },
+  memberSchedule: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 2,
+    marginBottom: Spacing.sm,
   },
-  hourBlock: {
-    width: '23%',
-    padding: 10,
-    margin: '1%',
-    borderRadius: 8,
+  hourSlot: {
+    width: '11.5%',
+    aspectRatio: 1,
+    borderRadius: BorderRadius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 2,
+    marginHorizontal: 1,
+  },
+  hourSlotText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.medium,
+  },
+  memberSummary: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    fontWeight: Typography.weights.medium,
+  },
+  groupInfoContainer: {
+    marginBottom: Spacing.lg,
+  },
+  groupCodeContainer: {
+    backgroundColor: Colors.tactical.medium,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border.medium,
     alignItems: 'center',
   },
-  hourText: {
-    fontSize: 12,
-    fontWeight: 'bold',
+  groupCodeLabel: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.text.secondary,
+    fontWeight: Typography.weights.medium,
+    marginBottom: Spacing.xs,
   },
-  countText: {
-    fontSize: 10,
-    marginTop: 2,
+  groupCodeValue: {
+    fontSize: Typography.sizes.xl,
+    color: Colors.accent,
+    fontWeight: Typography.weights.bold,
+    letterSpacing: 3,
+    textAlign: 'center',
   },
-  legend: {
-    marginTop: 20,
-    padding: 10,
-    backgroundColor: 'white',
-    borderRadius: 8,
+  shareButton: {
+    marginBottom: Spacing.md,
   },
-  legendTitle: {
-    fontWeight: 'bold',
-    marginBottom: 5,
+  shareButtonGradient: {
+    paddingVertical: Spacing.lg,
   },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 2,
-  },
-  legendColor: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    marginRight: 10,
-  },
-  legendText: {
-    fontSize: 14,
+  shareButtonText: {
+    fontSize: Typography.sizes.md,
+    fontWeight: Typography.weights.bold,
+    letterSpacing: 0.5,
   },
 });
 

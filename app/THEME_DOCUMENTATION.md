@@ -339,4 +339,67 @@ When updating the theme:
 
 ---
 
-**Remember: Consistency is key to a professional user experience. Always use the global theme system!**
+## 🚀 New Reusable Theme Architecture
+
+### Import Pattern
+```typescript
+// ✅ NEW: Use reusable theme system
+import { 
+  Colors, 
+  Typography, 
+  Spacing, 
+  BorderRadius, 
+  Shadows,
+  CommonStyles,
+  HeaderStyles
+} from '../theme';
+
+// ❌ OLD: Direct constants import (deprecated)
+import { Colors } from '../constants/theme';
+```
+
+### Common Styles Usage
+```typescript
+// Use pre-built common styles
+<View style={[CommonStyles.container]}>
+  <View style={[CommonStyles.panel]}>
+    <Text style={[CommonStyles.heading]}>Title</Text>
+    <TextInput style={[CommonStyles.input]} />
+    <TouchableOpacity style={[CommonStyles.buttonBase]}>
+      <LinearGradient style={CommonStyles.buttonGradient}>
+        <Text style={CommonStyles.buttonText}>Action</Text>
+      </LinearGradient>
+    </TouchableOpacity>
+  </View>
+</View>
+```
+
+### Theme Hooks (Alternative)
+```typescript
+import { useTheme, useThemeColors } from '../theme';
+
+const Component = () => {
+  const theme = useTheme();
+  const colors = useThemeColors();
+  
+  return (
+    <View style={{ backgroundColor: colors.background }}>
+      <Text style={{ color: colors.textPrimary }}>Content</Text>
+    </View>
+  );
+};
+```
+
+## 📱 Updated Screen Status
+
+✅ **Properly Themed with New Architecture:**
+- ModernLoginScreen
+- ProfileScreen  
+- SettingsScreen
+- FindGroupScreen
+- CreateTeamScreen
+- JoinTeamScreen
+- MeetScreen
+- **GroupScreen** ← Newly updated!
+
+**Remember: Clean Counter-Strike 2 theme only - no decorative elements, just functional tactical design!**

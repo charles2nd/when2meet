@@ -54,12 +54,18 @@ function RootLayoutNav() {
     <AuthProvider>
       <AppProvider>
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="login" />
+            <Stack.Screen name="dateDetail" />
+            <Stack.Screen name="groupSettings" />
+            <Stack.Screen name="setAvailability" />
+            <Stack.Screen name="+not-found" options={{ title: 'Oops!' }} />
           </Stack>
         </ThemeProvider>
       </AppProvider>
     </AuthProvider>
   );
 }
+
+export default RootLayout;
