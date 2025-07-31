@@ -76,7 +76,7 @@ const ModernLoginScreen: React.FC = () => {
     }
     
     // Invalid length
-    const errorMessage = 'Please enter a 10-digit phone number (e.g., 123 456 4323)';
+    const errorMessage = t.phone.phoneValidationError || 'Please enter a 10-digit phone number (e.g., 123 456 4323)';
     setPhoneError(errorMessage);
     showToast(errorMessage, 'error');
     return false;
@@ -139,11 +139,11 @@ const ModernLoginScreen: React.FC = () => {
 
   const validateVerificationCode = (code: string) => {
     if (!code.trim()) {
-      setCodeError('Verification code is required');
+      setCodeError(t.phone.verificationCodeRequired || 'Verification code is required');
       return false;
     }
     if (code.length !== 6 || !/^\d{6}$/.test(code)) {
-      setCodeError('Please enter a valid 6-digit code');
+      setCodeError(t.phone.invalidVerificationCode || 'Please enter a valid 6-digit code');
       return false;
     }
     setCodeError('');
@@ -171,7 +171,7 @@ const ModernLoginScreen: React.FC = () => {
         console.log('[LOGIN] ✅ Successfully set confirmation and sessionId');
       } else {
         console.error('[LOGIN] ❌ Invalid result structure:', result);
-        throw new Error('Invalid response from phone authentication service');
+        throw new Error(t.common.error || 'Invalid response from phone authentication service');
       }
       setStep('verify');
       startResendTimer();
@@ -194,11 +194,11 @@ const ModernLoginScreen: React.FC = () => {
         const remainingTime = error.message.split('_')[2];
         errorMessage = `Too many attempts. Please wait ${remainingTime} seconds.`;
       } else if (error.message === 'TOO_MANY_SMS_ATTEMPTS') {
-        errorMessage = 'Too many SMS attempts. Please wait 15 minutes.';
+        errorMessage = t.phone.tooManyRequests || 'Too many SMS attempts. Please wait 15 minutes.';
       } else if (error.message === 'INVALID_PHONE_NUMBER') {
-        errorMessage = 'Invalid phone number. For testing, use: 123 456 7891';
+        errorMessage = t.phone.invalidPhoneForTesting || 'Invalid phone number. For testing, use: 123 456 7891';
       } else if (error.message === 'SMS_QUOTA_EXCEEDED') {
-        errorMessage = 'SMS service temporarily unavailable. Please try again later.';
+        errorMessage = t.phone.smsQuotaExceeded || 'SMS service temporarily unavailable. Please try again later.';
       }
       
       // Show toast notification for immediate feedback
@@ -231,7 +231,7 @@ const ModernLoginScreen: React.FC = () => {
         setShowVerificationModal(false);
         
         // Show success toast
-        showToast('Phone number verified successfully!', 'success');
+        showToast(t.phone.phoneVerifiedSuccessfully || 'Phone number verified successfully!', 'success');
         
         // Navigate to group page
         setTimeout(() => {
@@ -254,15 +254,15 @@ const ModernLoginScreen: React.FC = () => {
       if (error.message === 'INVALID_VERIFICATION_CODE') {
         errorMessage = t.phone.invalidCode || 'Invalid verification code. Please try again.';
       } else if (error.message === 'CODE_EXPIRED') {
-        errorMessage = 'Verification code has expired. Please request a new one.';
+        errorMessage = t.phone.codeExpired || 'Verification code has expired. Please request a new one.';
       } else if (error.message === 'SESSION_EXPIRED') {
-        errorMessage = 'Session expired. Please start over.';
+        errorMessage = t.phone.sessionExpired || 'Session expired. Please start over.';
         setStep('phone');
       } else if (error.message === 'TOO_MANY_VERIFICATION_ATTEMPTS') {
-        errorMessage = 'Too many failed attempts. Please request a new code.';
+        errorMessage = t.phone.tooManyAttempts || 'Too many failed attempts. Please request a new code.';
         setStep('phone');
       } else if (error.message === 'INVALID_SESSION') {
-        errorMessage = 'Invalid session. Please start over.';
+        errorMessage = t.phone.invalidSession || 'Invalid session. Please start over.';
         setStep('phone');
       }
       
@@ -344,8 +344,8 @@ const ModernLoginScreen: React.FC = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <SafeHeader
-        title="When2Meet"
-        subtitle={step === 'phone' ? 'Sign in with your phone number' : 'Verify your phone number'}
+        title={t.group.loginPageTitle || 'When2Meet'}
+        subtitle={step === 'phone' ? (t.group.loginPageSubtitle || 'Sign in with your phone number') : (t.group.verifyPageSubtitle || 'Verify your phone number')}
         colors={[Colors.primary, Colors.primaryDark, Colors.tactical.dark]}
       >
         <View style={styles.headerContent}>

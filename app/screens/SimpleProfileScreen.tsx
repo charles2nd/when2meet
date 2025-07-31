@@ -128,7 +128,7 @@ const SimpleProfileScreen: React.FC = () => {
 
       <View style={styles.section}>
         <Text style={styles.label}>{t.profile.name}</Text>
-        <Text style={styles.value}>{authUser.name || authUser.displayName || 'User'}</Text>
+        <Text style={styles.value}>{authUser.name || authUser.displayName || t.group.defaultUserName}</Text>
       </View>
 
       <View style={styles.section}>
@@ -136,7 +136,7 @@ const SimpleProfileScreen: React.FC = () => {
           {authUser.phoneNumber ? t.phone.phoneNumber : t.profile.email}
         </Text>
         <Text style={styles.value}>
-          {authUser.phoneNumber || authUser.email || 'Not provided'}
+          {authUser.phoneNumber || authUser.email || t.group.notProvided}
         </Text>
       </View>
 

@@ -161,6 +161,32 @@ export class CryptoService {
   }
 
   /**
+   * Generate consistent user ID based on phone number
+   * This ensures the same phone number always gets the same UID
+   */
+  static async generateConsistentUserId(phoneNumber: string): Promise<string> {
+    try {
+      // Use phone number hash to generate consistent UID
+      const hash = await this.hashPhoneNumber(phoneNumber);
+      
+      // Create a phone-specific UID format
+      const consistentUid = `phone-${hash.substring(0, 20)}`;
+      
+      console.log('[CRYPTO] Generated consistent UID for phone:', phoneNumber.substring(0, 5) + '***', '→', consistentUid.substring(0, 15) + '...');
+      return consistentUid;
+    } catch (error) {
+      console.error('[CRYPTO] Error generating consistent UID:', error);
+      
+      // Fallback: use simple hash-based UID
+      const simpleHash = this.simpleHash(phoneNumber + '_phone_uid_salt');
+      const fallbackUid = `phone-fallback-${simpleHash}`;
+      
+      console.warn('[CRYPTO] Using fallback UID generation:', fallbackUid.substring(0, 15) + '...');
+      return fallbackUid;
+    }
+  }
+
+  /**
    * Secure comparison to prevent timing attacks
    */
   static secureCompare(a: string, b: string): boolean {

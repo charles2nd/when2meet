@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, Animated } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useApp } from '../contexts/AppContext';
 import { Colors } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,20 +10,41 @@ import { LocalStorage } from '../services/LocalStorage';
 import { DateUtils } from '../utils/dateUtils';
 
 const DateDetailScreen: React.FC = () => {
-  const params = useLocalSearchParams();
-  const { user, currentGroup, groupAvailabilities, myAvailability, saveAvailability, loadGroupAvailabilities, t, language } = useApp();
   const router = useRouter();
-  const [currentDate, setCurrentDate] = useState<string>('');
+  const params = useLocalSearchParams();
   
-  // Initialize currentDate with params in useEffect to avoid useInsertionEffect warning
-  useEffect(() => {
+  // Initialize date immediately from params
+  const [currentDate, setCurrentDate] = useState<string>(() => {
     const dateParam = params.date as string;
-    if (dateParam) {
-      setCurrentDate(dateParam);
-    } else {
-      setCurrentDate(new Date().toISOString().split('T')[0]);
+    return dateParam || new Date().toISOString().split('T')[0];
+  });
+  
+  const [isContextReady, setIsContextReady] = useState<boolean>(false);
+  
+  // Safely access context with error boundary
+  let contextValue: ReturnType<typeof useApp> | null = null;
+  let user: any = null;
+  let currentGroup: any = null;
+  let groupAvailabilities: any[] = [];
+  let myAvailability: any = null;
+  let saveAvailability: any = null;
+  let loadGroupAvailabilities: any = null;
+  let t: any = null;
+  let language: any = null;
+  
+  try {
+    contextValue = useApp();
+    if (contextValue && isContextReady) {
+      ({ user, currentGroup, groupAvailabilities, myAvailability, saveAvailability, loadGroupAvailabilities, t, language } = contextValue);
     }
-  }, [params.date]);
+  } catch (error) {
+    console.error('[DATE_DETAIL] Error accessing app context:', error);
+  }
+  
+  // Mark context as ready after first render
+  useEffect(() => {
+    setIsContextReady(true);
+  }, []);
   const [availableMembers, setAvailableMembers] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageText, setMessageText] = useState('');
@@ -40,28 +61,33 @@ const DateDetailScreen: React.FC = () => {
   const flatListRef = useRef<FlatList>(null);
 
   // Enhanced time range presets with translations
-  const getTimePresets = () => [
-    { id: 'morning', name: t.calendar.morning, description: t.calendar.morningDesc, startTime: 6, endTime: 12, icon: 'sunny', color: Colors.accent },
-    { id: 'afternoon', name: t.calendar.afternoon, description: t.calendar.afternoonDesc, startTime: 12, endTime: 18, icon: 'partly-sunny', color: Colors.primary },
-    { id: 'evening', name: t.calendar.evening, description: t.calendar.eveningDesc, startTime: 18, endTime: 24, icon: 'moon', color: Colors.secondary },
-    { id: 'work', name: t.calendar.workHours, description: t.calendar.workHoursDesc, startTime: 9, endTime: 17, icon: 'business', color: Colors.success },
-    { id: 'fullday', name: t.calendar.fullDay, description: t.calendar.fullDayDesc, startTime: 0, endTime: 24, icon: 'time', color: Colors.text.primary },
-  ];
+  const getTimePresets = () => {
+    if (!t || !t.calendar) return [];
+    return [
+      { id: 'morning', name: t.calendar.morning, description: t.calendar.morningDesc, startTime: 6, endTime: 12, icon: 'sunny', color: Colors.accent },
+      { id: 'afternoon', name: t.calendar.afternoon, description: t.calendar.afternoonDesc, startTime: 12, endTime: 18, icon: 'partly-sunny', color: Colors.primary },
+      { id: 'evening', name: t.calendar.evening, description: t.calendar.eveningDesc, startTime: 18, endTime: 24, icon: 'moon', color: Colors.secondary },
+      { id: 'work', name: t.calendar.workHours, description: t.calendar.workHoursDesc, startTime: 9, endTime: 17, icon: 'business', color: Colors.success },
+      { id: 'fullday', name: t.calendar.fullDay, description: t.calendar.fullDayDesc, startTime: 0, endTime: 24, icon: 'time', color: Colors.text.primary },
+    ];
+  };
 
   useEffect(() => {
-    if (!currentDate || !currentGroup) return;
+    if (!isContextReady || !contextValue || !currentDate || !currentGroup) return;
 
     // Find all members available on this date
     const available = new Set<string>();
     
-    groupAvailabilities.forEach(availability => {
-      const hasAvailability = availability.slots.some(slot => 
-        slot.date === currentDate && slot.available
-      );
-      if (hasAvailability) {
-        available.add(availability.userId);
-      }
-    });
+    if (groupAvailabilities && Array.isArray(groupAvailabilities)) {
+      groupAvailabilities.forEach(availability => {
+        const hasAvailability = availability.slots.some(slot => 
+          slot.date === currentDate && slot.available
+        );
+        if (hasAvailability) {
+          available.add(availability.userId);
+        }
+      });
+    }
 
     setAvailableMembers(Array.from(available));
 
@@ -112,7 +138,7 @@ const DateDetailScreen: React.FC = () => {
     }
 
     // Messages will be loaded via Firestore subscription
-  }, [currentDate, currentGroup, groupAvailabilities, myAvailability, user]);
+  }, [isContextReady, contextValue, currentDate, currentGroup, groupAvailabilities, myAvailability, user]);
 
   const loadUserDefaultTimeRange = async () => {
     if (!user) return;
@@ -126,7 +152,7 @@ const DateDetailScreen: React.FC = () => {
 
   // Subscribe to chat messages for the current date
   useEffect(() => {
-    if (!currentGroup || !currentDate) return;
+    if (!isContextReady || !contextValue || !currentGroup || !currentDate) return;
 
     console.log('[DATE_DETAIL] Setting up chat subscription for date:', currentDate);
     
@@ -150,10 +176,10 @@ const DateDetailScreen: React.FC = () => {
       console.log('[DATE_DETAIL] Cleaning up chat subscription');
       unsubscribe();
     };
-  }, [currentGroup, currentDate]);
+  }, [isContextReady, contextValue, currentGroup, currentDate]);
 
   const sendMessage = async () => {
-    if (!messageText.trim() || !user || !currentGroup || isSending) return;
+    if (!messageText.trim() || !user || !currentGroup || isSending || !t) return;
 
     setIsSending(true);
     
@@ -179,7 +205,7 @@ const DateDetailScreen: React.FC = () => {
       }, 200);
     } catch (error) {
       console.error('[DATE_DETAIL] ❌ Error sending message:', error);
-      showToastMessage(t.calendar.failedToSendMessage);
+      showToastMessage(t?.calendar?.failedToSendMessage || 'Failed to send message');
     } finally {
       setIsSending(false);
     }
@@ -229,13 +255,13 @@ const DateDetailScreen: React.FC = () => {
   };
 
   const handleSetTimeRange = async () => {
-    if (!userAvailability || !currentGroup) {
-      showToastMessage(`❌ ${t.calendar.unableToSetAvailability}`);
+    if (!userAvailability || !currentGroup || !t) {
+      showToastMessage(`❌ ${t?.calendar?.unableToSetAvailability || 'Unable to set availability'}`);
       return;
     }
     
     if (startTime >= endTime) {
-      showToastMessage(`⚠️ ${t.calendar.endTimeAfterStart}`);
+      showToastMessage(`⚠️ ${t?.calendar?.endTimeAfterStart || 'End time must be after start time'}`);
       return;
     }
 
@@ -265,13 +291,17 @@ const DateDetailScreen: React.FC = () => {
       setUserAvailability(updatedAvailability);
       
       // Save to storage
-      await saveAvailability(updatedAvailability);
+      if (saveAvailability) {
+        await saveAvailability(updatedAvailability);
+      }
       
       // Save the last set time range
       setLastSetTimeRange({ startTime, endTime });
       
       // Refresh calendar to show updated colors
-      await loadGroupAvailabilities();
+      if (loadGroupAvailabilities) {
+        await loadGroupAvailabilities();
+      }
       
       const timeStr = DateUtils.formatTimeRange(startTime, endTime, language || 'en');
       showToastMessage(`✅ ${t.calendar.customRangeSet}: ${timeStr}`);
@@ -494,12 +524,12 @@ const DateDetailScreen: React.FC = () => {
     );
   };
 
-  // Prevent rendering until currentDate is initialized to avoid useInsertionEffect warnings
-  if (!currentDate) {
+  // Prevent rendering until component is properly initialized and context is ready
+  if (!isContextReady || !contextValue || !currentDate) {
     return (
       <View style={styles.container}>
         <View style={styles.content}>
-          <Text style={styles.loadingText}>{t.common.loading}</Text>
+          <Text style={styles.loadingText}>{t?.common?.loading || 'Loading...'}</Text>
         </View>
       </View>
     );

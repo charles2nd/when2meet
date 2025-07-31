@@ -669,9 +669,12 @@ export class SecurePhoneAuthService {
               environment: 'firebase-test-number'
             });
 
+            // Generate consistent UID based on phone number to maintain data persistence
+            const consistentUid = await CryptoService.generateConsistentUserId(phoneNumber);
+            
             return {
               user: {
-                uid: `test-${await CryptoService.generateRandomString(12)}`,
+                uid: consistentUid,
                 phoneNumber: phoneNumber,
                 displayName: 'Test User',
                 providerData: [{

@@ -51,7 +51,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [myAvailability, setMyAvailability] = useState<Availability | null>(null);
   const [groupAvailabilities, setGroupAvailabilities] = useState<Availability[]>([]);
   const [userGroups, setUserGroups] = useState<Group[]>([]);
-  const [language, setLanguage] = useState<Language>('fr'); // French by default
+  const [language, setLanguage] = useState<Language>('en'); // English by default
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [languageLoaded, setLanguageLoaded] = useState<boolean>(false);
   const [userSyncing, setUserSyncing] = useState<boolean>(false);
@@ -65,9 +65,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setLanguage(savedLanguage as Language);
           console.log('[APP] Loaded saved language:', savedLanguage);
         } else {
-          console.log('[APP] No saved language, using default: fr');
-          // Save French as default language
-          await LocalStorage.saveLanguage('fr');
+          console.log('[APP] No saved language, using default: en');
+          // Save English as default language
+          await LocalStorage.saveLanguage('en');
         }
       } catch (error) {
         console.error('[APP] Error loading language:', error);
@@ -607,6 +607,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Check if current user is admin of current group
   const isAdmin = !!(user && currentGroup && currentGroup.isAdmin(user.id));
 
+  // Stabilize functions to prevent unnecessary re-renders
+  const stableCreateGroup = useMemo(() => createGroup, [user?.id]);
+  const stableJoinGroup = useMemo(() => joinGroup, [user?.id]);
+  const stableSaveAvailability = useMemo(() => saveAvailability, []);
+  const stableLoadGroupAvailabilities = useMemo(() => loadGroupAvailabilities, [currentGroup?.id]);
+  const stableLoadUserGroups = useMemo(() => loadUserGroups, [user?.id]);
+  const stableUpdateLanguage = useMemo(() => updateLanguage, []);
+  const stableLogout = useMemo(() => logout, []);
+  
+  // Stabilize translation function
+  const stableT = useMemo(() => {
+    return translations[language] || translations.en;
+  }, [language]);
+
   const value: AppContextType = useMemo(() => ({
     user,
     setUser,
@@ -618,16 +632,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     groupAvailabilities,
     isLoading,
     userSyncing,
-    logout,
-    createGroup,
-    joinGroup,
-    // leaveGroup, // Temporarily disabled
-    saveAvailability,
-    loadGroupAvailabilities,
-    loadUserGroups,
+    logout: stableLogout,
+    createGroup: stableCreateGroup,
+    joinGroup: stableJoinGroup,
+    saveAvailability: stableSaveAvailability,
+    loadGroupAvailabilities: stableLoadGroupAvailabilities,
+    loadUserGroups: stableLoadUserGroups,
     language,
-    setLanguage: updateLanguage,
-    t: translations[language] || translations.fr // Fallback to French if language is invalid
+    setLanguage: stableUpdateLanguage,
+    t: stableT
   }), [
     user,
     currentGroup,
@@ -637,7 +650,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     groupAvailabilities,
     isLoading,
     userSyncing,
-    language
+    stableLogout,
+    stableCreateGroup,
+    stableJoinGroup,
+    stableSaveAvailability,
+    stableLoadGroupAvailabilities,
+    stableLoadUserGroups,
+    language,
+    stableUpdateLanguage,
+    stableT
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

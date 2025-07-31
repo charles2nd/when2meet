@@ -343,7 +343,7 @@ const GroupScreen: React.FC = () => {
                 {/* Current Groups */}
                 {userGroups.length > 0 && (
                   <View style={styles.groupSection}>
-                    <Text style={styles.sectionTitle}>MES GROUPES ({userGroups.length})</Text>
+                    <Text style={styles.sectionTitle}>{t.group.myGroupsTitle} ({userGroups.length})</Text>
                     {userGroups.map((group) => (
                       <TouchableOpacity
                         key={group.id}
@@ -366,7 +366,7 @@ const GroupScreen: React.FC = () => {
                             </View>
                           </View>
                           <Text style={styles.groupItemMembers}>
-                            {group.members?.length || 0} membres
+                            {group.members?.length || 0} {t.group.members}
                           </Text>
                         </View>
                       </TouchableOpacity>
@@ -432,11 +432,11 @@ const GroupScreen: React.FC = () => {
                   </Text>
                   
                   <View style={styles.modernInputContainer}>
-                    <Text style={styles.modernInputLabel}>CODE DU GROUPE</Text>
+                    <Text style={styles.modernInputLabel}>{t.group.groupCodeInputLabel}</Text>
                     <View style={styles.inputWrapper}>
                       <TextInput
                         style={[styles.modernInput, styles.codeInput, getWebStyle('textInput')]}
-                        placeholder="Ex: ABC123"
+                        placeholder={t.group.exampleCode}
                         placeholderTextColor={Colors.text.tertiary}
                         value={groupCode}
                         onChangeText={setGroupCode}
@@ -450,7 +450,7 @@ const GroupScreen: React.FC = () => {
                       </View>
                     </View>
                     <Text style={styles.modernInputHint}>
-                      Group code is usually 6 characters long.
+                      {t.group.groupCodeHint}
                     </Text>
                   </View>
                 </View>
@@ -519,7 +519,7 @@ const GroupScreen: React.FC = () => {
                   </Text>
                   
                   <View style={styles.modernInputContainer}>
-                    <Text style={styles.modernInputLabel}>NOM DU GROUPE</Text>
+                    <Text style={styles.modernInputLabel}>{t.group.groupNameInputLabel}</Text>
                     <View style={styles.inputWrapper}>
                       <TextInput
                         style={[styles.modernInput, getWebStyle('textInput')]}
@@ -536,7 +536,7 @@ const GroupScreen: React.FC = () => {
                     </View>
                     <View style={styles.characterCounter}>
                       <Text style={[styles.modernInputHint, { color: groupName.length > 25 ? Colors.warning : Colors.text.tertiary }]}>
-                        {groupName.length}/30 caractères
+                        {groupName.length}/30 {t.group.characters}
                       </Text>
                     </View>
                   </View>
@@ -593,8 +593,8 @@ const GroupScreen: React.FC = () => {
       <AuthGuard>
         <View style={[CommonStyles.container]}>
           <SafeHeader
-            title="AUCUN GROUPE"
-            subtitle="Créez ou rejoignez un groupe pour commencer"
+            title={t.group.noGroups}
+            subtitle={t.group.noGroupsDescription}
             colors={[Colors.primary, Colors.primaryDark]}
           >
             <View style={styles.logoContainer}>
@@ -613,7 +613,7 @@ const GroupScreen: React.FC = () => {
                 style={CommonStyles.buttonGradient}
               >
                 <Ionicons name="add-circle" size={24} color={Colors.text.inverse} />
-                <Text style={[CommonStyles.buttonText, { color: Colors.text.inverse }]}>GÉRER MES GROUPES</Text>
+                <Text style={[CommonStyles.buttonText, { color: Colors.text.inverse }]}>{t.group.groupsManagement}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -631,7 +631,7 @@ const GroupScreen: React.FC = () => {
       <AuthGuard>
         <View style={CommonStyles.container}>
           <SafeHeader
-            title="MES GROUPES"
+            title={t.group.myGroupsTitle}
             colors={[Colors.primary, Colors.primaryDark]}
             centered={false}
           >
@@ -652,7 +652,7 @@ const GroupScreen: React.FC = () => {
             <View style={[CommonStyles.panel]}>
               <View style={styles.panelHeader}>
                 <Ionicons name="people" size={20} color={Colors.accent} />
-                <Text style={styles.panelTitle}>MES GROUPES ({userGroups.length})</Text>
+                <Text style={styles.panelTitle}>{t.group.myGroupsTitle} ({userGroups.length})</Text>
               </View>
               
               {userGroups.map((group) => (
@@ -662,7 +662,7 @@ const GroupScreen: React.FC = () => {
                       <Text style={styles.groupName}>{group.name}</Text>
                       <Text style={styles.groupCode}>Code: {group.code}</Text>
                       <Text style={styles.groupMembers}>
-                        {group.members.length} {group.members.length === 1 ? 'membre' : 'membres'}
+                        {group.members.length} {group.members.length === 1 ? t.group.member : t.group.members}
                       </Text>
                     </View>
                   </View>
@@ -685,7 +685,7 @@ const GroupScreen: React.FC = () => {
                     }}
                   >
                     <Ionicons name="arrow-forward" size={20} color={Colors.primary} />
-                    <Text style={styles.selectGroupButtonText}>Sélectionner</Text>
+                    <Text style={styles.selectGroupButtonText}>{t.group.select}</Text>
                   </TouchableOpacity>
                 </View>
               ))}
@@ -750,7 +750,7 @@ const GroupScreen: React.FC = () => {
         <View style={[CommonStyles.panel]}>
           <View style={styles.panelHeader}>
             <Ionicons name="people" size={20} color={Colors.accent} />
-            <Text style={styles.panelTitle}>SQUAD INFORMATION</Text>
+            <Text style={styles.panelTitle}>{t.group.squadInfo}</Text>
           </View>
           
           <View style={styles.groupInfoContainer}>
@@ -786,7 +786,7 @@ const GroupScreen: React.FC = () => {
           </View>
           
           <Text style={styles.memberSummary}>
-            Team members: {currentGroup.members?.length || 0}
+            {t.group.teamMembers}: {currentGroup.members?.length || 0}
           </Text>
         </View>
 

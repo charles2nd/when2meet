@@ -201,7 +201,25 @@ export const translations = {
       created: 'Created',
       current: 'Current',
       admin: 'Admin',
-      code: 'Code'
+      code: 'Code',
+      groupsManagement: 'MANAGE MY GROUPS',
+      noGroups: 'NO GROUPS',
+      noGroupsDescription: 'Create or join a group to get started',
+      squadInfo: 'SQUAD INFORMATION',
+      teamMembers: 'Team members',
+      groupCodeLabel: 'Group Code',
+      characters: 'characters',
+      select: 'Select',
+      exampleCode: 'Ex: ABC123',
+      exampleName: 'Team kebab',
+      groupCodeInputLabel: 'GROUP CODE',
+      groupNameInputLabel: 'GROUP NAME',
+      groupCodeHint: 'Group code is usually 6 characters long.',
+      loginPageTitle: 'When2Meet',
+      loginPageSubtitle: 'Sign in with your phone number',
+      verifyPageSubtitle: 'Verify your phone number',
+      defaultUserName: 'User',
+      notProvided: 'Not provided'
     },
     profile: {
       title: 'Profile',
@@ -250,7 +268,19 @@ export const translations = {
       verificationFailed: 'Verification failed. Please try again.',
       resendCode: 'Resend Code',
       resendIn: 'Resend in',
-      changePhoneNumber: 'Change Phone Number'
+      changePhoneNumber: 'Change Phone Number',
+      phoneRequired: 'Phone number is required',
+      phoneValidationError: 'Please enter a 10-digit phone number (e.g., 123 456 4323)',
+      verificationCodeRequired: 'Verification code is required',
+      invalidVerificationCode: 'Please enter a valid 6-digit code',
+      codeExpired: 'Verification code has expired. Please request a new one.',
+      sessionExpired: 'Session expired. Please start over.',
+      tooManyAttempts: 'Too many failed attempts. Please request a new code.',
+      invalidSession: 'Invalid session. Please start over.',
+      smsQuotaExceeded: 'SMS service temporarily unavailable. Please try again later.',
+      tooManyRequests: 'Too many SMS attempts. Please wait 15 minutes.',
+      invalidPhoneForTesting: 'Invalid phone number. For testing, use: 123 456 7891',
+      phoneVerifiedSuccessfully: 'Phone number verified successfully!'
     },
     groupSettings: {
       title: 'Group Settings',
@@ -487,7 +517,25 @@ export const translations = {
       created: 'Créé',
       current: 'Actuel',
       admin: 'Admin',
-      code: 'Code'
+      code: 'Code',
+      groupsManagement: 'GÉRER MES GROUPES',
+      noGroups: 'AUCUN GROUPE',
+      noGroupsDescription: 'Créez ou rejoignez un groupe pour commencer',
+      squadInfo: 'INFORMATIONS DE L\'ÉQUIPE',
+      teamMembers: 'Membres de l\'équipe',
+      groupCodeLabel: 'Code du Groupe',
+      characters: 'caractères',
+      select: 'Sélectionner',
+      exampleCode: 'Ex: ABC123',
+      exampleName: 'Team kebab',
+      groupCodeInputLabel: 'CODE DU GROUPE',
+      groupNameInputLabel: 'NOM DU GROUPE',
+      groupCodeHint: 'Le code du groupe fait généralement 6 caractères.',
+      loginPageTitle: 'When2Meet',
+      loginPageSubtitle: 'Connectez-vous avec votre numéro de téléphone',
+      verifyPageSubtitle: 'Vérifiez votre numéro de téléphone',
+      defaultUserName: 'Utilisateur',
+      notProvided: 'Non fourni'
     },
     profile: {
       title: 'Profil',
@@ -536,7 +584,19 @@ export const translations = {
       verificationFailed: 'Échec de la vérification. Veuillez réessayer.',
       resendCode: 'Renvoyer le Code',
       resendIn: 'Renvoyer dans',
-      changePhoneNumber: 'Changer le Numéro de Téléphone'
+      changePhoneNumber: 'Changer le Numéro de Téléphone',
+      phoneRequired: 'Numéro de téléphone requis',
+      phoneValidationError: 'Veuillez entrer un numéro de téléphone à 10 chiffres (ex: 123 456 4323)',
+      verificationCodeRequired: 'Code de vérification requis',
+      invalidVerificationCode: 'Veuillez entrer un code valide à 6 chiffres',
+      codeExpired: 'Le code de vérification a expiré. Veuillez en demander un nouveau.',
+      sessionExpired: 'Session expirée. Veuillez recommencer.',
+      tooManyAttempts: 'Trop de tentatives échouées. Veuillez demander un nouveau code.',
+      invalidSession: 'Session invalide. Veuillez recommencer.',
+      smsQuotaExceeded: 'Service SMS temporairement indisponible. Veuillez réessayer plus tard.',
+      tooManyRequests: 'Trop de tentatives SMS. Veuillez attendre 15 minutes.',
+      invalidPhoneForTesting: 'Numéro de téléphone invalide. Pour les tests, utilisez: 123 456 7891',
+      phoneVerifiedSuccessfully: 'Numéro de téléphone vérifié avec succès!'
     },
     groupSettings: {
       title: 'Paramètres du Groupe',
@@ -577,7 +637,7 @@ export type Language = 'en' | 'fr';
 export type TranslationKey = typeof translations.en;
 
 // Safe translation function to prevent crashes
-export const getTranslation = (key: string, lang: Language = 'fr'): string => {
+export const getTranslation = (key: string, lang: Language = 'en'): string => {
   try {
     const keys = key.split('.');
     let value: any = translations[lang] || translations.en;
@@ -586,23 +646,18 @@ export const getTranslation = (key: string, lang: Language = 'fr'): string => {
       if (value && typeof value === 'object' && k in value) {
         value = value[k];
       } else {
-        // Fallback to French if key not found
-        value = translations.fr;
+        // Fallback to opposite language if key not found in selected language
+        const fallbackLang = lang === 'en' ? 'fr' : 'en';
+        value = translations[fallbackLang];
         for (const k of keys) {
           if (value && typeof value === 'object' && k in value) {
             value = value[k];
           } else {
-            // Try English as last resort
-            value = translations.en;
-            for (const k of keys) {
-              if (value && typeof value === 'object' && k in value) {
-                value = value[k];
-              } else {
-                return key; // Return key itself if not found
-              }
-            }
+            console.warn(`[TRANSLATIONS] Missing translation key: ${key} in both ${lang} and ${fallbackLang}`);
+            return key; // Return key itself if not found in any language
           }
         }
+        break;
       }
     }
     

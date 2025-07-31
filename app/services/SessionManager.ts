@@ -190,7 +190,8 @@ export class SessionManager {
   static isSessionValid(sessionData: SessionData): boolean {
     const now = Date.now();
     const isExpired = now > sessionData.expiresAt;
-    const hasUser = sessionData.user && sessionData.user.uid && sessionData.user.email;
+    const hasUser = sessionData.user && sessionData.user.uid && 
+                   (sessionData.user.email || sessionData.user.phoneNumber);
     
     if (isExpired) {
       console.log('[SESSION] Session expired:', new Date(sessionData.expiresAt));
