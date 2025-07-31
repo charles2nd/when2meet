@@ -4,7 +4,10 @@ export const translations = {
       ok: 'OK',
       cancel: 'Cancel',
       yes: 'Yes',
-      no: 'No'
+      no: 'No',
+      checkingAuth: 'Checking authentication...',
+      loadingData: 'Loading your data...',
+      loading: 'Loading...'
     },
     tabs: {
       calendar: 'Calendar',
@@ -287,7 +290,10 @@ export const translations = {
       ok: 'OK',
       cancel: 'Annuler',
       yes: 'Oui',
-      no: 'Non'
+      no: 'Non',
+      checkingAuth: 'Vérification de l\'authentification...',
+      loadingData: 'Chargement de vos données...',
+      loading: 'Chargement...'
     },
     tabs: {
       calendar: 'Calendrier',

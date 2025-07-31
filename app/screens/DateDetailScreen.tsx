@@ -499,7 +499,7 @@ const DateDetailScreen: React.FC = () => {
     return (
       <View style={styles.container}>
         <View style={styles.content}>
-          <Text style={styles.loadingText}>Loading...</Text>
+          <Text style={styles.loadingText}>{t.common.loading}</Text>
         </View>
       </View>
     );

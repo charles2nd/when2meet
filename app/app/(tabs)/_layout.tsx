@@ -43,7 +43,7 @@ export default function TabLayout() {
         <AppLogo size={80} variant="icon" showShadow={true} />
         <ActivityIndicator size="large" color={Colors.primary} style={styles.loadingSpinner} />
         <Text style={styles.loadingText}>
-          {loading ? 'Checking authentication...' : 'Loading your data...'}
+          {loading ? t.common.checkingAuth : t.common.loadingData}
         </Text>
       </View>
     );
