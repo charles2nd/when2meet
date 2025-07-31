@@ -62,4 +62,14 @@ export class Availability implements IAvailability {
   static fromJSON(data: IAvailability): Availability {
     return new Availability(data);
   }
+
+  // Create a deep copy of the availability to prevent mutation issues
+  clone(): Availability {
+    return new Availability({
+      userId: this.userId,
+      groupId: this.groupId,
+      slots: this.slots.map(slot => ({ ...slot })), // Deep copy each slot
+      updatedAt: this.updatedAt
+    });
+  }
 }

@@ -1,33 +1,61 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow all reads and writes for testing
-    // IMPORTANT: Change these rules before going to production
-    match /{document=**} {
-      allow read, write: if true;
+    // PRODUCTION SECURITY RULES - Properly restrict access
+    
+    // Users can only access their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // Production-ready rules (commented out for testing)
-    /*
-    // Teams collection
-    match /teams/{teamId} {
-      allow read, write: if request.auth != null;
+    // Groups collection - secure access by membership and admin roles
+    match /groups/{groupId} {
+      // Users can read groups they are members of
+      allow read: if request.auth != null && 
+                  request.auth.uid in resource.data.members;
+      
+      // Only group admins can modify group data
+      allow write: if request.auth != null && 
+                   request.auth.uid == resource.data.adminId;
+      
+      // Allow creating new groups (user becomes admin)
+      allow create: if request.auth != null && 
+                    request.auth.uid == request.resource.data.adminId;
     }
     
-    // Team members can read/write their team data
-    match /teams/{teamId}/members/{memberId} {
-      allow read, write: if request.auth != null && request.auth.uid == memberId;
-    }
-    
-    // Availability collection
+    // Availability data - users can only access their own and their group members'
     match /availability/{availabilityId} {
+      allow read, write: if request.auth != null && 
+                         request.auth.uid == request.resource.data.userId;
+      
+      // Group members can read each other's availability
+      allow read: if request.auth != null && 
+                  exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)) &&
+                  request.auth.uid in get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.members;
+    }
+    
+    // Messages/Chat - only group members can access
+    match /messages/{messageId} {
+      allow read, write: if request.auth != null && 
+                         exists(/databases/$(database)/documents/groups/$(resource.data.groupId)) &&
+                         request.auth.uid in get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.members;
+    }
+    
+    // Day-specific messages - only group members can access
+    match /dayMessages/{messageId} {
+      allow read, write: if request.auth != null && 
+                         exists(/databases/$(database)/documents/groups/$(resource.data.groupId)) &&
+                         request.auth.uid in get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.members;
+    }
+    
+    // Test collection - restricted to authenticated users only
+    match /test/{testId} {
       allow read, write: if request.auth != null;
     }
     
-    // Test collection for connection testing
-    match /test/{testId} {
-      allow read, write: if true;
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
     }
-    */
   }
 }

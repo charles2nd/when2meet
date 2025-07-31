@@ -82,10 +82,12 @@ const CalendarHeatmapScreen: React.FC = () => {
         </Text>
       </View>
 
-      <CalendarHeatmap
-        data={heatmapData}
-        onDatePress={handleDatePress}
-      />
+      <View style={styles.calendarContainer}>
+        <CalendarHeatmap
+          data={heatmapData}
+          onDatePress={handleDatePress}
+        />
+      </View>
 
       <View style={styles.compactLegend}>
         <View style={styles.legendRow}>
@@ -112,12 +114,6 @@ const CalendarHeatmapScreen: React.FC = () => {
         </View>
       </View>
 
-      <TouchableOpacity 
-        style={styles.setAvailabilityButton}
-        onPress={() => router.push('/setAvailability')}
-      >
-        <Text style={styles.setAvailabilityText}>Set My Availability</Text>
-      </TouchableOpacity>
     </View>
   );
 };
@@ -128,10 +124,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     paddingTop: RESPONSIVE.safeArea.top,
   },
+  calendarContainer: {
+    flex: 1,
+    paddingHorizontal: RESPONSIVE.spacing.sm,
+    paddingVertical: RESPONSIVE.spacing.md,
+  },
   header: {
     paddingHorizontal: RESPONSIVE.spacing.md,
-    paddingTop: RESPONSIVE.spacing.md,
-    paddingBottom: RESPONSIVE.spacing.sm,
+    paddingTop: RESPONSIVE.spacing.xl,
+    paddingBottom: RESPONSIVE.spacing.lg,
     alignItems: 'center',
   },
   title: {
@@ -177,21 +178,6 @@ const styles = StyleSheet.create({
     fontSize: RESPONSIVE.fontSizes.xs,
     color: Colors.text.secondary,
     textAlign: 'center',
-  },
-  setAvailabilityButton: {
-    backgroundColor: Colors.primary,
-    marginHorizontal: RESPONSIVE.spacing.md,
-    marginTop: RESPONSIVE.spacing.sm,
-    marginBottom: RESPONSIVE.safeArea.bottom + RESPONSIVE.spacing.md,
-    paddingVertical: RESPONSIVE.spacing.md,
-    paddingHorizontal: RESPONSIVE.spacing.lg,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  setAvailabilityText: {
-    color: Colors.text.primary,
-    fontSize: RESPONSIVE.fontSizes.md,
-    fontWeight: 'bold',
   },
 });
 

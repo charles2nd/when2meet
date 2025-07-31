@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, StatusBar, Share, ActivityIndicator, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, StatusBar, Share, ActivityIndicator, Modal, KeyboardAvoidingView, Platform, Alert, Animated } from 'react-native';
+import { ClipboardUtil } from '../utils/clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useApp } from '../contexts/AppContext';
 import { Colors, Typography, Spacing, BorderRadius, CommonStyles, HeaderStyles } from '../theme';
 import { getWebStyle } from '../utils/webStyles';
@@ -17,12 +18,16 @@ import { LocalStorage } from '../services/LocalStorage';
 const GroupScreen: React.FC = () => {
   const { user, currentGroup, userGroups, groupAvailabilities, createGroup, joinGroup, loadGroupAvailabilities, loadUserGroups, setCurrentGroup, setUser, t } = useApp();
   const router = useRouter();
+  const params = useLocalSearchParams<{ inviteCode?: string }>();
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [modalMode, setModalMode] = useState<'list' | 'join' | 'create'>('list');
   const [groupCode, setGroupCode] = useState('');
   const [groupName, setGroupName] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string>('');
+  const [showToast, setShowToast] = useState(false);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (currentGroup) {
       console.log('[GROUP] Loading group availabilities...');
@@ -31,6 +36,45 @@ const GroupScreen: React.FC = () => {
     // Load user groups when component mounts
     loadUserGroups();
   }, [currentGroup]);
+
+  // Handle invite code from deep link
+  useEffect(() => {
+    if (params.inviteCode && !currentGroup) {
+      console.log('[GROUP] Received invite code from deep link:', params.inviteCode);
+      
+      // Auto-fill the join form with the invite code
+      setGroupCode(params.inviteCode);
+      setModalMode('join');
+      setShowGroupModal(true);
+      
+      // Show a toast notification
+      showToastMessage(`📬 ${t.group.inviteCodeReceived || 'Invite code received!'} ${params.inviteCode}`);
+    }
+  }, [params.inviteCode]);
+
+  const showToastMessage = (message: string) => {
+    setToastMessage(message);
+    setShowToast(true);
+    
+    // Reset animation
+    toastOpacity.setValue(0);
+    
+    Animated.sequence([
+      Animated.timing(toastOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.delay(2500),
+      Animated.timing(toastOpacity, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowToast(false);
+    });
+  };
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) {
@@ -93,34 +137,60 @@ const GroupScreen: React.FC = () => {
     }
   };
 
-  const handleShareGroup = async () => {
-    if (!currentGroup) return;
+  const generateInviteLink = () => {
+    if (!currentGroup) return '';
+    
+    // For development, use the app scheme directly
+    // This will work with your dev client
+    if (__DEV__) {
+      return `when2meet://join/${currentGroup.code}`;
+    }
+    
+    // For production, use a web URL that can redirect to the app
+    const baseUrl = 'https://when2meet.app'; // Replace with your actual domain
+    return `${baseUrl}/join/${currentGroup.code}`;
+  };
 
+
+  const handleQuickShare = async () => {
+    if (!currentGroup) return;
+    
     try {
-      const shareMessage = `🎯 ${t.group.inviteMessage}\n\n` +
-        `${t.group.squadNameLabel}: ${currentGroup.name}\n` +
-        `${t.group.groupCodeLabel}: ${currentGroup.code}\n\n` +
-        `${t.group.shareInstructions}`;
+      const inviteLink = generateInviteLink();
 
       const shareOptions = {
-        message: shareMessage,
-        title: `${t.group.shareTitle} ${currentGroup.name}`,
+        message: inviteLink, // Only the link, nothing else
       };
 
       const result = await Share.share(shareOptions);
-
+      
       if (result.action === Share.sharedAction) {
-        if (result.activityType) {
-          console.log('[SHARE] Shared via:', result.activityType);
-        } else {
-          console.log('[SHARE] Group shared successfully');
-        }
-      } else if (result.action === Share.dismissedAction) {
-        console.log('[SHARE] Share dismissed');
+        showToastMessage(`⚡ ${t.group.quickShareSuccess || 'Invite link shared!'}`);
       }
     } catch (error) {
-      console.error('[SHARE] Error sharing group:', error);
-      console.error('[SHARE] ❌ Share error:', t.group.shareErrorMessage);
+      console.error('[SHARE] Quick share error:', error);
+      showToastMessage(`❌ ${t.group.shareErrorMessage || 'Failed to share'}`);
+    }
+  };
+
+  const handleCopyGroupCode = async () => {
+    if (!currentGroup) return;
+
+    try {
+      const success = await ClipboardUtil.setStringAsync(currentGroup.code);
+      
+      if (!success) {
+        // Fallback: show error message
+        showToastMessage(`❌ ${t.group.manualCopyMessage || 'Please copy this code manually'}: ${currentGroup.code}`);
+        return;
+      }
+      
+      // Show success toast with the code
+      showToastMessage(`✅ ${t.group.copiedToClipboard || 'Copied to clipboard'}: ${currentGroup.code}`);
+      console.log('[GROUP] ✅ Group code copied to clipboard:', currentGroup.code);
+    } catch (error) {
+      console.error('[GROUP] ❌ Failed to copy code to clipboard:', error);
+      showToastMessage(`❌ ${t.group.copyErrorMessage || 'Failed to copy code to clipboard'}`);
     }
   };
 
@@ -563,25 +633,35 @@ const GroupScreen: React.FC = () => {
           </View>
           
           <View style={styles.groupInfoContainer}>
-            <View style={styles.groupCodeContainer}>
-              <Text style={styles.groupCodeLabel}>{t.group.groupCodeLabel || 'Squad Code'}:</Text>
-              <Text style={styles.groupCodeValue}>{currentGroup.code}</Text>
-            </View>
-            
             <TouchableOpacity 
-              style={[CommonStyles.buttonBase, styles.shareButton, getWebStyle('touchableOpacity')]}
-              onPress={handleShareGroup}
+              style={styles.groupCodeContainer}
+              onPress={handleCopyGroupCode}
+              activeOpacity={0.7}
+            >
+              <View style={styles.codeHeader}>
+                <Text style={styles.groupCodeLabel}>{t.group.groupCodeLabel || 'Squad Code'}:</Text>
+                <Ionicons name="copy-outline" size={20} color={Colors.accent} />
+              </View>
+              <Text style={styles.groupCodeValue}>{currentGroup.code}</Text>
+              <Text style={styles.copyHint}>{t.group.tapToCopy || 'Tap to copy'}</Text>
+            </TouchableOpacity>
+            
+            {/* Quick Share Button - Primary Sharing Method */}
+            <TouchableOpacity 
+              style={styles.quickShareButton}
+              onPress={handleQuickShare}
+              activeOpacity={0.8}
             >
               <LinearGradient
-                colors={[Colors.accent, '#FF8F00']}
-                style={[CommonStyles.buttonGradient, styles.shareButtonGradient]}
+                colors={[Colors.primary, Colors.primaryDark]}
+                style={styles.quickShareGradient}
               >
-                <Ionicons name="share-outline" size={20} color={Colors.text.inverse} />
-                <Text style={[CommonStyles.buttonText, styles.shareButtonText]}>
-                  {t.group.inviteMembers || 'INVITE SQUAD MEMBERS'}
-                </Text>
+                <Ionicons name="link" size={26} color={Colors.text.primary} />
+                <Text style={styles.quickShareText}>{t.group.quickShare || 'Share Invite Link'}</Text>
+                <Ionicons name="arrow-forward" size={20} color={Colors.text.primary} />
               </LinearGradient>
             </TouchableOpacity>
+            
           </View>
           
           <Text style={styles.memberSummary}>
@@ -591,6 +671,15 @@ const GroupScreen: React.FC = () => {
 
       </ScrollView>
       </View>
+      
+      {/* Toast Notification */}
+      {showToast && (
+        <Animated.View style={[styles.toastContainer, { opacity: toastOpacity }]}>
+          <View style={styles.toastContent}>
+            <Text style={styles.toastText}>{toastMessage}</Text>
+          </View>
+        </Animated.View>
+      )}
     </AuthGuard>
   );
 };
@@ -735,11 +824,24 @@ const styles = StyleSheet.create({
   groupCodeContainer: {
     backgroundColor: Colors.tactical.medium,
     borderRadius: BorderRadius.md,
-    padding: Spacing.sm, // Reduced from md to sm for compact design
-    marginBottom: Spacing.sm, // Reduced from lg to sm for compact design
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
     borderWidth: 1,
     borderColor: Colors.border.medium,
     alignItems: 'center',
+    // Add touchable button styling
+    elevation: 2,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  codeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+    width: '100%',
   },
   groupCodeLabel: {
     fontSize: Typography.sizes.sm,
@@ -753,16 +855,35 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.bold,
     letterSpacing: 3,
     textAlign: 'center',
+    marginBottom: Spacing.xs,
   },
-  shareButton: {
-    marginBottom: Spacing.sm, // Reduced from md to sm for compact design
+  copyHint: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.text.tertiary,
+    textAlign: 'center',
+    fontWeight: Typography.weights.medium,
   },
-  shareButtonGradient: {
-    paddingVertical: Spacing.md, // Reduced from lg to md for compact design
+  quickShareButton: {
+    marginTop: Spacing.md,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  shareButtonText: {
-    fontSize: Typography.sizes.md,
+  quickShareGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.lg,
+    gap: Spacing.sm,
+  },
+  quickShareText: {
+    fontSize: Typography.sizes.lg,
     fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
     letterSpacing: 0.5,
   },
   disabledButton: {
@@ -1063,6 +1184,36 @@ const styles = StyleSheet.create({
     color: Colors.text.inverse,
     fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.bold,
+  },
+  toastContainer: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+  },
+  toastContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.shadow.dark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.primary,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+  },
+  toastText: {
+    fontSize: Typography.sizes.md,
+    color: Colors.text.primary,
+    fontWeight: Typography.weights.medium,
+    textAlign: 'center',
   },
 });
 

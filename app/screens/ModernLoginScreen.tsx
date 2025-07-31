@@ -18,6 +18,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
 import { getWebStyle } from '../utils/webStyles';
 import { SafeHeader } from '../components/SafeHeader';
+import { AppLogo } from '../components/AppLogo';  
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 import { translations } from '../services/translations';
 
@@ -180,12 +181,7 @@ const ModernLoginScreen: React.FC = () => {
       >
         <View style={styles.headerContent}>
           <View style={styles.logoContainer}>
-            <LinearGradient
-              colors={[Colors.accent, '#FF6F00']}
-              style={styles.logoGradient}
-            >
-              <Ionicons name="calendar" size={24} color={Colors.text.inverse} />
-            </LinearGradient>
+            <AppLogo size={60} variant="icon" showShadow={true} />
           </View>
           
           {/* Language Switcher */}

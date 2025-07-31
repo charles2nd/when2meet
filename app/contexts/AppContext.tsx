@@ -25,6 +25,7 @@ interface AppContextType {
   
   // Loading state
   isLoading: boolean;
+  userSyncing: boolean;
   
   // Actions
   login: (name: string, email: string) => Promise<void>;
@@ -54,6 +55,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [language, setLanguage] = useState<Language>('fr'); // French by default
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [languageLoaded, setLanguageLoaded] = useState<boolean>(false);
+  const [userSyncing, setUserSyncing] = useState<boolean>(false);
 
   // Load saved language and initialize demo data on app start
   useEffect(() => {
@@ -96,27 +98,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!languageLoaded) return; // Wait for language to load first
       
       if (authUser) {
+        setUserSyncing(true);
         console.log('[APP] Syncing user from Firebase Auth:', authUser.uid);
         
-        // ALWAYS create fresh user data from Firebase Auth - don't rely on local cache for user identity
-        const appUser = new User({
+        // Create temporary user object - don't set it yet until groups are loaded
+        const tempUser = new User({
           id: authUser.uid,
           name: authUser.displayName || 'User',
           email: authUser.email,
           language: language,
-          groupId: undefined // Clear groupId - will be loaded from Firebase
+          groupId: undefined // Will be set after groups are loaded
         });
         
         // Update user data in Firebase to ensure consistency
         try {
-          await FirebaseGroupService.updateUserData(appUser);
+          await FirebaseGroupService.updateUserData(tempUser);
           console.log('[APP] User data synchronized with Firebase');
         } catch (error) {
           console.error('[APP] Failed to sync user data with Firebase:', error);
         }
-        
-        setUser(appUser);
-        console.log('[APP] User synced from AuthContext (fresh from Firebase):', appUser.toJSON());
         
         // Force refresh user groups from Firebase (not local cache)
         console.log('[APP] Force refreshing user groups from Firebase...');
@@ -127,6 +127,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           console.log('[APP] Loaded', firebaseGroups.length, 'groups from Firebase during sync');
           
           // If user has groups, set the first one as current (or find saved current group)
+          let finalUser = tempUser;
           if (firebaseGroups.length > 0) {
             // Try to get saved current group
             const savedUser = await LocalStorage.getUser();
@@ -135,18 +136,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               if (currentGroup) {
                 setCurrentGroup(currentGroup);
                 // Update user with correct groupId
-                const updatedUser = new User({
+                finalUser = new User({
                   id: authUser.uid,
                   name: authUser.displayName || 'User',
                   email: authUser.email,
                   language: language,
                   groupId: currentGroup.id
                 });
-                setUser(updatedUser);
                 console.log('[APP] Restored current group from saved data:', currentGroup.name);
               }
             }
           }
+          
+          // Always set user after groups are processed to prevent flash
+          setUser(finalUser);
+          setUserSyncing(false);
+          console.log('[APP] User synced from AuthContext with groups loaded:', finalUser.toJSON());
         } catch (error) {
           console.error('[APP] Error loading groups from Firebase during sync, trying local fallback:', error);
           // Fallback to local only if Firebase completely fails
@@ -158,6 +163,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             console.error('[APP] Both Firebase and local group loading failed:', localError);
             setUserGroups([]);
           }
+          
+          // Set user even if group loading failed to prevent auth loop
+          setUser(tempUser);
+          setUserSyncing(false);
+          console.log('[APP] User set with fallback (no groups):', tempUser.toJSON());
         }
       } else {
         // User logged out - clear all data
@@ -166,6 +176,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setUserGroups([]);
         setMyAvailability(null);
         setGroupAvailabilities([]);
+        setUserSyncing(false);
         console.log('[APP] User logged out - cleared all data');
       }
     };
@@ -470,7 +481,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Note: leaveGroup functionality temporarily disabled
 
   const saveAvailability = async (availability: Availability) => {
-    console.log('[APP] Saving availability...');
+    console.log('[APP] Saving availability with', availability.slots.length, 'total slots...');
+    console.log('[APP] Slots by date:', availability.slots.reduce((acc, slot) => {
+      acc[slot.date] = (acc[slot.date] || 0) + (slot.available ? 1 : 0);
+      return acc;
+    }, {} as Record<string, number>));
+    
     // Ensure we have a proper Availability instance
     const properAvailability = availability instanceof Availability ? 
       availability : 
@@ -487,7 +503,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Always save locally as backup
     await LocalStorage.saveAvailability(properAvailability);
     setMyAvailability(properAvailability);
-    console.log('[APP] Availability saved');
+    console.log('[APP] Availability saved successfully - new availability has', properAvailability.slots.length, 'slots');
   };
 
   const loadGroupAvailabilities = async () => {
@@ -596,6 +612,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     myAvailability,
     groupAvailabilities,
     isLoading,
+    userSyncing,
     login,
     logout,
     createGroup,
@@ -615,6 +632,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     myAvailability,
     groupAvailabilities,
     isLoading,
+    userSyncing,
     language
   ]);
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, StatusBar, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -68,15 +68,25 @@ const CalendarScreen: React.FC = () => {
     if (!availability || !currentGroup || isUpdating) return;
     
     console.log('[CALENDAR] Toggling availability for', date, hour);
+    console.log('[CALENDAR] Current availability has', availability.slots.length, 'total slots before toggle');
+    
+    // Use the clone method to create a proper deep copy that preserves all existing availability
+    const updatedAvailability = availability.clone();
     
     // Update local state immediately for instant UI feedback
-    const isAvailable = availability.getSlot(date, hour);
-    availability.setSlot(date, hour, !isAvailable);
-    setAvailability({...availability});
+    const isAvailable = updatedAvailability.getSlot(date, hour);
+    updatedAvailability.setSlot(date, hour, !isAvailable);
     
+    console.log('[CALENDAR] After toggle, availability has', updatedAvailability.slots.length, 'total slots');
+    console.log('[CALENDAR] Slots by date:', updatedAvailability.slots.reduce((acc, slot) => {
+      acc[slot.date] = (acc[slot.date] || 0) + (slot.available ? 1 : 0);
+      return acc;
+    }, {} as Record<string, number>));
+    
+    setAvailability(updatedAvailability);
     
     // Debounced save to prevent excessive calls
-    saveAvailabilityDebounced(availability);
+    saveAvailabilityDebounced(updatedAvailability);
   };
 
   // Debounced save function to prevent multiple rapid saves
@@ -98,24 +108,6 @@ const CalendarScreen: React.FC = () => {
     [saveAvailability, loadGroupAvailabilities, currentGroup]
   );
 
-  const handleManualSave = async () => {
-    if (!availability || !currentGroup) {
-      Alert.alert(t.common.error, t.calendar.noGroup);
-      return;
-    }
-
-    try {
-      setIsUpdating(true);
-      await saveAvailability(availability);
-      await loadGroupAvailabilities();
-      Alert.alert(t.common.success, t.calendar.saved);
-    } catch (error) {
-      console.error('[CALENDAR] Manual save error:', error);
-      Alert.alert(t.common.error, 'Failed to save availability');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
 
   // This should not render anymore due to redirect, but keeping as fallback
   if (!currentGroup) {
@@ -133,8 +125,8 @@ const CalendarScreen: React.FC = () => {
     <AuthGuard>
       <View style={[CommonStyles.container]}>
         <SafeHeader
-          title="MISSION CALENDAR"
-          subtitle="Set your operational availability"
+          title={t.calendar.missionCalendarTitle}
+          subtitle={t.calendar.setOperationalAvailability}
           colors={[Colors.secondary, Colors.secondaryDark]}
         >
           <View style={styles.logoContainer}>
@@ -147,18 +139,18 @@ const CalendarScreen: React.FC = () => {
         <View style={[CommonStyles.panel]}>
           <View style={styles.panelHeader}>
             <Ionicons name="calendar" size={20} color={Colors.accent} />
-            <Text style={styles.panelTitle}>SELECT DATE</Text>
+            <Text style={styles.panelTitle}>{t.calendar.selectDatePanel}</Text>
           </View>
           
-          <FlatList
+          <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.dateContainer}
             contentContainerStyle={styles.dateContentContainer}
-            data={dates}
-            keyExtractor={(item) => item}
-            renderItem={({ item: date }) => (
+          >
+            {dates.map((date) => (
               <TouchableOpacity
+                key={date}
                 style={[
                   styles.dateButton,
                   selectedDate === date && styles.selectedDate
@@ -172,8 +164,8 @@ const CalendarScreen: React.FC = () => {
                   {new Date(date).getDate()}
                 </Text>
               </TouchableOpacity>
-            )}
-          />
+            ))}
+          </ScrollView>
         </View>
 
         {/* Hours Grid Panel */}
@@ -181,7 +173,7 @@ const CalendarScreen: React.FC = () => {
           <View style={[CommonStyles.panel]}>
             <View style={styles.panelHeader}>
               <Ionicons name="time" size={20} color={Colors.accent} />
-              <Text style={styles.panelTitle}>AVAILABILITY HOURS</Text>
+              <Text style={styles.panelTitle}>{t.calendar.availabilityHoursPanel}</Text>
             </View>
             
             <View style={styles.hoursGrid}>
@@ -210,21 +202,6 @@ const CalendarScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Save Button */}
-        <View style={styles.saveContainer}>
-          <TouchableOpacity 
-            style={[CommonStyles.buttonBase, getWebStyle('touchableOpacity')]}
-            onPress={handleManualSave}
-          >
-            <LinearGradient
-              colors={[Colors.primary, Colors.primaryDark]}
-              style={CommonStyles.buttonGradient}
-            >
-              <Ionicons name="save-outline" size={20} color={Colors.text.primary} />
-              <Text style={CommonStyles.buttonText}>{t.calendar.save}</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
       </View>
     </AuthGuard>
@@ -293,20 +270,28 @@ const styles = StyleSheet.create({
   hoursGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.xs,
-    paddingHorizontal: Spacing.xs,
+    gap: Spacing.lg, // Much larger gap (24px) for better ergonomics
+    paddingHorizontal: Spacing.lg, // Increased padding for breathing room
+    paddingVertical: Spacing.md, // Add vertical padding
+    justifyContent: 'space-around', // Better distribution with more space
   },
   hourButton: {
-    width: '23%',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: BorderRadius.sm,
+    width: '20%', // Smaller width for more space between buttons
+    paddingVertical: Spacing.xl, // Much larger vertical padding (32px)
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.lg, // Larger border radius for modern look
     backgroundColor: Colors.tactical.medium,
     alignItems: 'center',
-    minHeight: 50,
+    minHeight: 68, // Increased minimum height for better touch targets
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 2, // Thicker border for better definition
     borderColor: Colors.border.medium,
+    marginBottom: Spacing.lg, // Much more bottom margin (24px) between rows
+    shadowColor: Colors.shadow.dark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   availableHour: {
     backgroundColor: Colors.success,
@@ -319,11 +304,6 @@ const styles = StyleSheet.create({
   },
   availableHourText: {
     color: Colors.text.primary,
-  },
-  saveContainer: {
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-    paddingBottom: Spacing.xxl,
   },
   noGroupText: {
     fontSize: Typography.sizes.lg,

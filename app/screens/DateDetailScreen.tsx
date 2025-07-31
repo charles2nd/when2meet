@@ -1,33 +1,42 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, Animated } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useApp } from '../contexts/AppContext';
 import { Colors } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { Availability } from '../models/SimpleAvailability';
-
-interface Message {
-  id: string;
-  userId: string;
-  userName: string;
-  text: string;
-  timestamp: string;
-}
+import { ChatService, ChatMessage } from '../services/ChatService';
+import { LocalStorage } from '../services/LocalStorage';
+import { DateUtils } from '../utils/dateUtils';
 
 const DateDetailScreen: React.FC = () => {
-  const { date } = useLocalSearchParams<{ date: string }>();
-  const { user, currentGroup, groupAvailabilities, myAvailability, saveAvailability, t } = useApp();
+  const params = useLocalSearchParams();
+  const { user, currentGroup, groupAvailabilities, myAvailability, saveAvailability, loadGroupAvailabilities, t, language } = useApp();
   const router = useRouter();
-  const [currentDate, setCurrentDate] = useState<string>(date as string);
+  const [currentDate, setCurrentDate] = useState<string>(params.date as string || new Date().toISOString().split('T')[0]);
   const [availableMembers, setAvailableMembers] = useState<string[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageText, setMessageText] = useState('');
   const [showTimeRangePicker, setShowTimeRangePicker] = useState<boolean>(false);
   const [startTime, setStartTime] = useState<number>(9);
   const [endTime, setEndTime] = useState<number>(17);
   const [userAvailability, setUserAvailability] = useState<Availability | null>(null);
   const [isSending, setIsSending] = useState(false);
-  const messageIdCounter = useRef(0);
+  const [userDefaultTimeRange, setUserDefaultTimeRange] = useState<{ startTime: number; endTime: number } | null>(null);
+  const [lastSetTimeRange, setLastSetTimeRange] = useState<{ startTime: number; endTime: number } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string>('');
+  const [showToast, setShowToast] = useState(false);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+  const flatListRef = useRef<FlatList>(null);
+
+  // Enhanced time range presets with translations
+  const getTimePresets = () => [
+    { id: 'morning', name: t.calendar.morning, description: t.calendar.morningDesc, startTime: 6, endTime: 12, icon: 'sunny', color: Colors.accent },
+    { id: 'afternoon', name: t.calendar.afternoon, description: t.calendar.afternoonDesc, startTime: 12, endTime: 18, icon: 'partly-sunny', color: Colors.primary },
+    { id: 'evening', name: t.calendar.evening, description: t.calendar.eveningDesc, startTime: 18, endTime: 24, icon: 'moon', color: Colors.secondary },
+    { id: 'work', name: t.calendar.workHours, description: t.calendar.workHoursDesc, startTime: 9, endTime: 17, icon: 'business', color: Colors.success },
+    { id: 'fullday', name: t.calendar.fullDay, description: t.calendar.fullDayDesc, startTime: 0, endTime: 24, icon: 'time', color: Colors.text.primary },
+  ];
 
   useEffect(() => {
     if (!currentDate || !currentGroup) return;
@@ -46,59 +55,156 @@ const DateDetailScreen: React.FC = () => {
 
     setAvailableMembers(Array.from(available));
 
-    // Initialize user availability
+    // Initialize user availability - CRITICAL: Always use the latest myAvailability from AppContext
     if (myAvailability) {
-      setUserAvailability(myAvailability);
+      console.log('[DATE_DETAIL] Using myAvailability with', myAvailability.slots.length, 'total slots');
+      console.log('[DATE_DETAIL] myAvailability slots by date:', myAvailability.slots.reduce((acc, slot) => {
+        acc[slot.date] = (acc[slot.date] || 0) + (slot.available ? 1 : 0);
+        return acc;
+      }, {} as Record<string, number>));
+      
+      // Create a deep clone to ensure we're working with a fresh copy
+      setUserAvailability(myAvailability.clone());
     } else if (user && currentGroup) {
-      setUserAvailability(new Availability({
-        userId: user.id,
-        groupId: currentGroup.id
-      }));
+      console.log('[DATE_DETAIL] Loading existing availability or creating new one');
+      // CRITICAL FIX: Always try to load existing availability first before creating new
+      const loadExistingAvailability = async () => {
+        try {
+          const existingAvailability = await LocalStorage.getAvailability(user.id, currentGroup.id);
+          if (existingAvailability) {
+            console.log('[DATE_DETAIL] Found existing availability with', existingAvailability.slots.length, 'slots');
+            setUserAvailability(existingAvailability);
+          } else {
+            console.log('[DATE_DETAIL] No existing availability found, creating new one');
+            const newAvailability = new Availability({
+              userId: user.id,
+              groupId: currentGroup.id
+            });
+            setUserAvailability(newAvailability);
+          }
+        } catch (error) {
+          console.error('[DATE_DETAIL] Error loading existing availability:', error);
+          // Fallback to creating new availability
+          const newAvailability = new Availability({
+            userId: user.id,
+            groupId: currentGroup.id
+          });
+          setUserAvailability(newAvailability);
+        }
+      };
+      
+      loadExistingAvailability();
     }
 
-    // Load saved messages for this date (would be from storage/Firebase)
-    // For now, using demo messages
-    setMessages([
-      {
-        id: '1',
-        userId: 'demo1',
-        userName: 'Player 1',
-        text: 'Great, we have enough people for a full team!',
-        timestamp: new Date().toISOString()
-      }
-    ]);
+    // Load user's default time range
+    if (user) {
+      loadUserDefaultTimeRange();
+    }
+
+    // Messages will be loaded via Firestore subscription
   }, [currentDate, currentGroup, groupAvailabilities, myAvailability, user]);
 
-  const sendMessage = () => {
-    if (!messageText.trim() || !user || isSending) return;
+  const loadUserDefaultTimeRange = async () => {
+    if (!user) return;
+    try {
+      const defaultRange = await LocalStorage.getUserDefaultTimeRange(user.id);
+      setUserDefaultTimeRange(defaultRange);
+    } catch (error) {
+      console.error('Error loading user default time range:', error);
+    }
+  };
+
+  // Subscribe to chat messages for the current date
+  useEffect(() => {
+    if (!currentGroup || !currentDate) return;
+
+    console.log('[DATE_DETAIL] Setting up chat subscription for date:', currentDate);
+    
+    const unsubscribe = ChatService.subscribeToDateMessages(
+      currentGroup.id,
+      currentDate,
+      (newMessages) => {
+        console.log('[DATE_DETAIL] Received', newMessages.length, 'messages for date:', currentDate);
+        setMessages(newMessages);
+        
+        // Auto-scroll to bottom when new messages arrive
+        setTimeout(() => {
+          if (flatListRef.current && newMessages.length > 0) {
+            flatListRef.current.scrollToEnd({ animated: true });
+          }
+        }, 100);
+      }
+    );
+
+    return () => {
+      console.log('[DATE_DETAIL] Cleaning up chat subscription');
+      unsubscribe();
+    };
+  }, [currentGroup, currentDate]);
+
+  const sendMessage = async () => {
+    if (!messageText.trim() || !user || !currentGroup || isSending) return;
 
     setIsSending(true);
     
-    // Generate unique ID using counter + timestamp
-    messageIdCounter.current += 1;
-    const uniqueId = `${user.id}_${Date.now()}_${messageIdCounter.current}`;
+    try {
+      console.log('[DATE_DETAIL] Sending message to Firestore for date:', currentDate);
+      
+      await ChatService.sendMessage(
+        currentGroup.id,
+        currentDate,
+        user.id,
+        user.name,
+        messageText.trim()
+      );
+      
+      setMessageText('');
+      console.log('[DATE_DETAIL] ✅ Message sent successfully');
+      
+      // Auto-scroll to bottom after sending message
+      setTimeout(() => {
+        if (flatListRef.current) {
+          flatListRef.current.scrollToEnd({ animated: true });
+        }
+      }, 200);
+    } catch (error) {
+      console.error('[DATE_DETAIL] ❌ Error sending message:', error);
+      showToastMessage(t.calendar.failedToSendMessage);
+    } finally {
+      setIsSending(false);
+    }
+  };
 
-    const newMessage: Message = {
-      id: uniqueId,
-      userId: user.id,
-      userName: user.name,
-      text: messageText.trim(),
-      timestamp: new Date().toISOString()
-    };
-
-    setMessages([...messages, newMessage]);
-    setMessageText('');
-    setIsSending(false);
-    // TODO: Save to storage/Firebase
+  const showToastMessage = (message: string) => {
+    setToastMessage(message);
+    setShowToast(true);
+    
+    // Reset animation
+    toastOpacity.setValue(0);
+    
+    Animated.sequence([
+      Animated.timing(toastOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.delay(2500), // Slightly longer display time for better readability
+      Animated.timing(toastOpacity, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowToast(false);
+    });
   };
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    return DateUtils.formatDate(dateStr, language || 'en', {
+      weekday: true,
+      year: true,
+      month: 'long',
+      day: true
     });
   };
 
@@ -113,29 +219,227 @@ const DateDetailScreen: React.FC = () => {
   };
 
   const handleSetTimeRange = async () => {
-    if (!userAvailability || !currentGroup || startTime >= endTime) {
-      Alert.alert('Error', 'Please select a valid time range');
+    if (!userAvailability || !currentGroup) {
+      showToastMessage(`❌ ${t.calendar.unableToSetAvailability}`);
+      return;
+    }
+    
+    if (startTime >= endTime) {
+      showToastMessage(`⚠️ ${t.calendar.endTimeAfterStart}`);
       return;
     }
 
     try {
-      // Clear existing availability for this date
-      userAvailability.clearDay(currentDate);
+      console.log('[DATE_DETAIL] Setting time range for date:', currentDate, 'from', startTime, 'to', endTime);
+      console.log('[DATE_DETAIL] Current availability has', userAvailability.slots.length, 'total slots before update');
+      
+      // Use the clone method to create a proper deep copy that preserves all existing availability
+      const updatedAvailability = userAvailability.clone();
+      
+      // Clear existing availability for this date only (this preserves other dates)
+      updatedAvailability.clearDay(currentDate);
+      console.log('[DATE_DETAIL] After clearing current date, availability has', updatedAvailability.slots.length, 'slots');
       
       // Set availability for the selected time range
       for (let hour = startTime; hour < endTime; hour++) {
-        userAvailability.setSlot(currentDate, hour, true);
+        updatedAvailability.setSlot(currentDate, hour, true);
       }
       
+      console.log('[DATE_DETAIL] After setting new times, availability has', updatedAvailability.slots.length, 'total slots');
+      console.log('[DATE_DETAIL] Slots by date:', updatedAvailability.slots.reduce((acc, slot) => {
+        acc[slot.date] = (acc[slot.date] || 0) + (slot.available ? 1 : 0);
+        return acc;
+      }, {} as Record<string, number>));
+      
+      // Update local state first
+      setUserAvailability(updatedAvailability);
+      
       // Save to storage
-      await saveAvailability(userAvailability);
-      setUserAvailability({...userAvailability});
+      await saveAvailability(updatedAvailability);
+      
+      // Save the last set time range
+      setLastSetTimeRange({ startTime, endTime });
+      
+      // Refresh calendar to show updated colors
+      await loadGroupAvailabilities();
+      
+      const timeStr = DateUtils.formatTimeRange(startTime, endTime, language || 'en');
+      showToastMessage(`✅ ${t.calendar.customRangeSet}: ${timeStr}`);
+      
+      // Close popup after successful save
+      setShowTimeRangePicker(false);
+    } catch (error) {
+      console.error('[DATE_DETAIL] Error saving time range:', error);
+      showToastMessage(`❌ ${t.calendar.failedToSave}`);
+      // Still close popup even on error
+      setShowTimeRangePicker(false);
+    }
+  };
+
+  const handlePresetSelection = async (preset: any) => {
+    if (!userAvailability || !currentGroup) {
+      showToastMessage(`❌ ${t.calendar.unableToSetAvailability}`);
+      return;
+    }
+
+    try {
+      console.log('[DATE_DETAIL] Setting preset', preset.name, 'for date:', currentDate);
+      console.log('[DATE_DETAIL] Current availability has', userAvailability.slots.length, 'total slots before update');
+      
+      // Use the clone method to create a proper deep copy that preserves all existing availability
+      const updatedAvailability = userAvailability.clone();
+      
+      // Clear existing availability for this date only (this preserves other dates)
+      updatedAvailability.clearDay(currentDate);
+      console.log('[DATE_DETAIL] After clearing current date, availability has', updatedAvailability.slots.length, 'slots');
+      
+      // Set availability for the preset time range
+      for (let hour = preset.startTime; hour < preset.endTime; hour++) {
+        updatedAvailability.setSlot(currentDate, hour, true);
+      }
+      
+      console.log('[DATE_DETAIL] After setting preset times, availability has', updatedAvailability.slots.length, 'total slots');
+      
+      // Update local state first
+      setUserAvailability(updatedAvailability);
+      
+      // Save to storage
+      await saveAvailability(updatedAvailability);
       setShowTimeRangePicker(false);
       
-      Alert.alert('Success', `Available from ${startTime}:00 to ${endTime}:00`);
+      // Save the last set time range
+      setLastSetTimeRange({ startTime: preset.startTime, endTime: preset.endTime });
+      
+      // Refresh calendar to show updated colors
+      await loadGroupAvailabilities();
+      
+      const timeStr = DateUtils.formatTimeRange(preset.startTime, preset.endTime, language || 'en');
+      showToastMessage(`✅ ${preset.name} ${t.calendar.presetSet}: ${timeStr}`);
     } catch (error) {
-      console.error('Error saving time range:', error);
-      Alert.alert('Error', 'Failed to save time range');
+      console.error('[DATE_DETAIL] Error saving preset time range:', error);
+      showToastMessage(`❌ ${t.calendar.failedToSave}`);
+    }
+  };
+
+  const handleMyDefaultSelection = async () => {
+    if (!userDefaultTimeRange) {
+      showToastMessage(`⚠️ ${t.calendar.noDefaultSaved}`);
+      return;
+    }
+
+    const preset = {
+      name: t.calendar.myDefault,
+      description: t.calendar.myDefaultDesc,
+      startTime: userDefaultTimeRange.startTime,
+      endTime: userDefaultTimeRange.endTime,
+      icon: 'star',
+      color: Colors.accent
+    };
+    
+    await handlePresetSelection(preset);
+  };
+
+  const saveAsDefault = async () => {
+    if (!user) {
+      showToastMessage(`❌ ${t.calendar.userNotFound}`);
+      return;
+    }
+    
+    if (startTime >= endTime) {
+      showToastMessage(`⚠️ ${t.calendar.selectValidTimeRange}`);
+      return;
+    }
+
+    try {
+      await LocalStorage.saveUserDefaultTimeRange(user.id, startTime, endTime);
+      setUserDefaultTimeRange({ startTime, endTime });
+      const timeStr = DateUtils.formatTimeRange(startTime, endTime, language || 'en');
+      showToastMessage(`⭐ ${t.calendar.savedAsDefault}: ${timeStr}`);
+    } catch (error) {
+      console.error('Error saving default time range:', error);
+      showToastMessage(`❌ ${t.calendar.failedToSaveDefault}`);
+    }
+  };
+
+  const handleQuickDefaultApplication = async () => {
+    if (!userDefaultTimeRange || !userAvailability || !currentGroup) {
+      showToastMessage(`⚠️ ${t.calendar.noDefaultSaved}`);
+      return;
+    }
+
+    try {
+      console.log('[DATE_DETAIL] Applying default time range for date:', currentDate);
+      console.log('[DATE_DETAIL] Current availability has', userAvailability.slots.length, 'total slots before update');
+      
+      // Use the clone method to create a proper deep copy that preserves all existing availability
+      const updatedAvailability = userAvailability.clone();
+      
+      // Clear existing availability for this date only (this preserves other dates)
+      updatedAvailability.clearDay(currentDate);
+      console.log('[DATE_DETAIL] After clearing current date, availability has', updatedAvailability.slots.length, 'slots');
+      
+      // Set availability for the default time range
+      for (let hour = userDefaultTimeRange.startTime; hour < userDefaultTimeRange.endTime; hour++) {
+        updatedAvailability.setSlot(currentDate, hour, true);
+      }
+      
+      console.log('[DATE_DETAIL] After setting default times, availability has', updatedAvailability.slots.length, 'total slots');
+      
+      // Update local state first
+      setUserAvailability(updatedAvailability);
+      
+      // Save to storage
+      await saveAvailability(updatedAvailability);
+      
+      // Refresh calendar to show updated colors
+      await loadGroupAvailabilities();
+      
+      const timeStr = DateUtils.formatTimeRange(userDefaultTimeRange.startTime, userDefaultTimeRange.endTime, language || 'en');
+      showToastMessage(`✅ ${t.calendar.defaultTimeApplied}: ${timeStr}`);
+    } catch (error) {
+      console.error('[DATE_DETAIL] Error applying quick default:', error);
+      showToastMessage(`❌ ${t.calendar.failedToApply}`);
+    }
+  };
+
+  const handleQuickLastSetApplication = async () => {
+    if (!lastSetTimeRange || !userAvailability || !currentGroup) {
+      showToastMessage(`⚠️ ${t.calendar.noTimeRangeSet}`);
+      return;
+    }
+
+    try {
+      console.log('[DATE_DETAIL] Applying last set time range for date:', currentDate);
+      console.log('[DATE_DETAIL] Current availability has', userAvailability.slots.length, 'total slots before update');
+      
+      // Use the clone method to create a proper deep copy that preserves all existing availability
+      const updatedAvailability = userAvailability.clone();
+      
+      // Clear existing availability for this date only (this preserves other dates)
+      updatedAvailability.clearDay(currentDate);
+      console.log('[DATE_DETAIL] After clearing current date, availability has', updatedAvailability.slots.length, 'slots');
+      
+      // Set availability for the last set time range
+      for (let hour = lastSetTimeRange.startTime; hour < lastSetTimeRange.endTime; hour++) {
+        updatedAvailability.setSlot(currentDate, hour, true);
+      }
+      
+      console.log('[DATE_DETAIL] After setting last set times, availability has', updatedAvailability.slots.length, 'total slots');
+      
+      // Update local state first
+      setUserAvailability(updatedAvailability);
+      
+      // Save to storage
+      await saveAvailability(updatedAvailability);
+      
+      // Refresh calendar to show updated colors
+      await loadGroupAvailabilities();
+      
+      const timeStr = DateUtils.formatTimeRange(lastSetTimeRange.startTime, lastSetTimeRange.endTime, language || 'en');
+      showToastMessage(`✅ ${t.calendar.lastTimeRangeApplied}: ${timeStr}`);
+    } catch (error) {
+      console.error('[DATE_DETAIL] Error applying last set time:', error);
+      showToastMessage(`❌ ${t.calendar.failedToApply}`);
     }
   };
 
@@ -151,7 +455,7 @@ const DateDetailScreen: React.FC = () => {
     const start = daySlots[0].hour;
     const end = daySlots[daySlots.length - 1].hour + 1;
     
-    return `${start.toString().padStart(2, '0')}:00 - ${end.toString().padStart(2, '0')}:00`;
+    return DateUtils.formatTimeRange(start, end, language || 'en');
   };
 
   const renderMember = ({ item }: { item: string }) => {
@@ -159,22 +463,22 @@ const DateDetailScreen: React.FC = () => {
     return (
       <View style={styles.memberItem}>
         <Ionicons name="person-circle" size={32} color={Colors.primary} />
-        <Text style={styles.memberName}>Member {item.slice(-4)}</Text>
+        <Text style={styles.memberName}>{t.calendar.member} {item.slice(-4)}</Text>
         <View style={styles.availableBadge}>
-          <Text style={styles.availableText}>Available</Text>
+          <Text style={styles.availableText}>{t.calendar.available}</Text>
         </View>
       </View>
     );
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const renderMessage = ({ item }: { item: ChatMessage }) => {
     const isMyMessage = item.userId === user?.id;
     return (
-      <View style={[styles.message, isMyMessage && styles.myMessage]}>
+      <View style={[styles.message, isMyMessage ? styles.myMessage : styles.otherMessage]}>
         <Text style={styles.messageAuthor}>{item.userName}</Text>
         <Text style={styles.messageText}>{item.text}</Text>
         <Text style={styles.messageTime}>
-          {new Date(item.timestamp).toLocaleTimeString()}
+          {ChatService.formatTimestamp(item.timestamp)}
         </Text>
       </View>
     );
@@ -186,7 +490,7 @@ const DateDetailScreen: React.FC = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={80}
     >
-      <ScrollView style={styles.content}>
+      <View style={styles.content}>
         <View style={styles.section}>
           <View style={styles.headerRow}>
             <TouchableOpacity onPress={() => navigateDate('prev')} style={styles.navButton}>
@@ -201,21 +505,37 @@ const DateDetailScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
           <Text style={styles.sectionTitle}>
-            Available Members ({availableMembers.length}/{currentGroup?.members.length})
+            {t.calendar.availableMembers} ({availableMembers.length}/{currentGroup?.members.length})
           </Text>
           
           {/* User Time Range Section */}
           <View style={styles.timeRangeSection}>
             <View style={styles.timeRangeHeader}>
-              <Text style={styles.timeRangeTitle}>Your Availability</Text>
+              <Text style={styles.timeRangeTitle}>{t.calendar.yourAvailability}</Text>
               <TouchableOpacity 
                 onPress={() => setShowTimeRangePicker(true)}
                 style={styles.setTimeButton}
               >
                 <Ionicons name="time" size={16} color={Colors.text.primary} />
-                <Text style={styles.setTimeText}>Set Time Range</Text>
+                <Text style={styles.setTimeText}>{t.calendar.setTimeRange}</Text>
               </TouchableOpacity>
             </View>
+            
+            {/* Default Button - More Prominent Placement */}
+            {userDefaultTimeRange && (
+              <TouchableOpacity 
+                onPress={handleQuickDefaultApplication}
+                style={styles.prominentDefaultButton}
+              >
+                <View style={styles.defaultButtonContent}>
+                  <Ionicons name="star" size={18} color={Colors.accent} />
+                  <Text style={styles.defaultButtonText}>{t.calendar.applyMyDefaultTime}</Text>
+                  <Text style={styles.defaultButtonTime}>
+                    {DateUtils.formatTimeRange(userDefaultTimeRange.startTime, userDefaultTimeRange.endTime, language || 'en')}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
             
             {getUserTimeRange() ? (
               <View style={styles.currentTimeRange}>
@@ -223,7 +543,23 @@ const DateDetailScreen: React.FC = () => {
                 <Text style={styles.timeRangeText}>{getUserTimeRange()}</Text>
               </View>
             ) : (
-              <Text style={styles.noTimeRange}>No availability set for this day</Text>
+              <Text style={styles.noTimeRange}>{t.calendar.noAvailabilitySet}</Text>
+            )}
+            
+            {/* Quick Set Box - Shows after setting time once */}
+            {lastSetTimeRange && !getUserTimeRange() && (
+              <TouchableOpacity 
+                style={styles.quickSetBox}
+                onPress={handleQuickLastSetApplication}
+                activeOpacity={0.7}
+              >
+                <View style={styles.quickSetContent}>
+                  <Ionicons name="add-circle" size={18} color={Colors.text.primary} />
+                  <Text style={styles.quickSetText}>
+                    {DateUtils.formatTimeRange(lastSetTimeRange.startTime, lastSetTimeRange.endTime, language || 'en')}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             )}
           </View>
           <FlatList
@@ -237,23 +573,30 @@ const DateDetailScreen: React.FC = () => {
         </View>
 
         <View style={styles.chatSection}>
-          <Text style={styles.sectionTitle}>Team Chat</Text>
+          <Text style={styles.sectionTitle}>{t.calendar.teamChat}</Text>
           <FlatList
+            ref={flatListRef}
             data={messages}
             renderItem={renderMessage}
             keyExtractor={(item, index) => `${item.id}_${index}`}
             style={styles.messagesList}
-            inverted
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={() => {
+              // Auto-scroll to bottom when content size changes
+              if (flatListRef.current && messages.length > 0) {
+                flatListRef.current.scrollToEnd({ animated: false });
+              }
+            }}
           />
         </View>
-      </ScrollView>
+      </View>
 
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
           value={messageText}
           onChangeText={setMessageText}
-          placeholder="Type a message..."
+          placeholder={t.calendar.typeMessage}
           placeholderTextColor={Colors.text.tertiary}
           multiline
         />
@@ -275,12 +618,20 @@ const DateDetailScreen: React.FC = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Set Your Availability</Text>
-            <Text style={styles.modalSubtitle}>I will play from:</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t.calendar.setYourAvailability}</Text>
+              <TouchableOpacity
+                onPress={saveAsDefault}
+                style={styles.saveDefaultStar}
+              >
+                <Ionicons name="star-outline" size={24} color={Colors.accent} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSubtitle}>{t.calendar.selectStartEndTimes}</Text>
             
             <View style={styles.timePickerContainer}>
               <View style={styles.timePicker}>
-                <Text style={styles.timeLabel}>From:</Text>
+                <Text style={styles.timeLabel}>{t.calendar.from}</Text>
                 <ScrollView style={styles.timeScroll} showsVerticalScrollIndicator={false}>
                   {Array.from({ length: 24 }, (_, i) => (
                     <TouchableOpacity
@@ -297,7 +648,7 @@ const DateDetailScreen: React.FC = () => {
               </View>
               
               <View style={styles.timePicker}>
-                <Text style={styles.timeLabel}>To:</Text>
+                <Text style={styles.timeLabel}>{t.calendar.to}</Text>
                 <ScrollView style={styles.timeScroll} showsVerticalScrollIndicator={false}>
                   {Array.from({ length: 24 }, (_, i) => i + 1).map(hour => (
                     <TouchableOpacity
@@ -319,19 +670,29 @@ const DateDetailScreen: React.FC = () => {
                 onPress={() => setShowTimeRangePicker(false)}
                 style={[styles.modalButton, styles.cancelButton]}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>{t.common.cancel}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
                 onPress={handleSetTimeRange}
                 style={[styles.modalButton, styles.confirmButton]}
               >
-                <Text style={styles.confirmButtonText}>Set Availability</Text>
+                <Text style={styles.confirmButtonText}>{t.calendar.setAvailability}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+      
+      {/* Custom Toast Notification */}
+      {showToast && (
+        <Animated.View style={[styles.toastContainer, { opacity: toastOpacity }]}>
+          <View style={styles.toastContent}>
+            <Ionicons name="checkmark-circle" size={20} color={Colors.success} />
+            <Text style={styles.toastText}>{toastMessage}</Text>
+          </View>
+        </Animated.View>
+      )}
     </KeyboardAvoidingView>
   );
 };
@@ -371,7 +732,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingTop: 20,
+    paddingTop: 85,
   },
   section: {
     paddingHorizontal: 24,
@@ -420,7 +781,6 @@ const styles = StyleSheet.create({
     maxHeight: 300,
   },
   message: {
-    backgroundColor: Colors.card,
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
@@ -429,6 +789,10 @@ const styles = StyleSheet.create({
   myMessage: {
     alignSelf: 'flex-end',
     backgroundColor: Colors.primary,
+  },
+  otherMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.card,
   },
   messageAuthor: {
     fontSize: 12,
@@ -484,6 +848,60 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  prominentDefaultButton: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 20,
+    marginTop: 16,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: Colors.accent,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  defaultButtonContent: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  defaultButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    textAlign: 'center',
+  },
+  defaultButtonTime: {
+    fontSize: 14,
+    color: Colors.accent,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  quickSetBox: {
+    marginTop: 16,
+    backgroundColor: Colors.primary,
+    borderRadius: 16,
+    padding: 20, // Increased padding for better touch target
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    minHeight: 68, // Ensure good touch target size
+  },
+  quickSetContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12, // Increased gap for better spacing
+  },
+  quickSetText: {
+    fontSize: 16, // Larger text for better readability
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+  },
   timeRangeTitle: {
     fontSize: 14,
     fontWeight: 'bold',
@@ -527,17 +945,28 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
-    paddingHorizontal: 32,
-    paddingVertical: 24,
-    width: '90%',
-    maxHeight: '80%',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    width: '85%',
+    maxHeight: '60%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.text.primary,
-    textAlign: 'center',
-    marginBottom: 8,
+    flex: 1,
+  },
+  saveDefaultStar: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: `${Colors.accent}15`,
   },
   modalSubtitle: {
     fontSize: 14,
@@ -588,9 +1017,11 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     alignItems: 'center',
+    minHeight: 48,
+    justifyContent: 'center',
   },
   cancelButton: {
     backgroundColor: Colors.card,
@@ -603,10 +1034,43 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     color: Colors.text.secondary,
     fontWeight: 'bold',
+    fontSize: 16,
   },
   confirmButtonText: {
     color: Colors.text.primary,
     fontWeight: 'bold',
+    fontSize: 16,
+  },
+  toastContainer: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+  },
+  toastContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: Colors.shadow.dark,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 12,
+    borderLeftWidth: 5,
+    borderLeftColor: Colors.primary,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+  },
+  toastText: {
+    fontSize: 15,
+    color: Colors.text.primary,
+    marginLeft: 12,
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 20,
   },
 });
 

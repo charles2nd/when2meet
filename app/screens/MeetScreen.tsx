@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   headerGradient: {
-    paddingTop: 50,
+    paddingTop: 85,
     paddingBottom: Spacing.lg,
     paddingHorizontal: Spacing.lg,
   },

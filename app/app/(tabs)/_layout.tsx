@@ -5,12 +5,13 @@ import { useRouter } from 'expo-router';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
+import { AppLogo } from '../../components/AppLogo';
 import { Colors } from '../../constants/theme';
 import { RESPONSIVE } from '../../utils/responsive';
 
 export default function TabLayout() {
   const { user: authUser, loading } = useAuth();
-  const { t, currentGroup, user: appUser } = useApp();
+  const { t, currentGroup, user: appUser, userSyncing } = useApp();
   const router = useRouter();
   
   // Authentication guard - redirect to login if not authenticated
@@ -35,12 +36,15 @@ export default function TabLayout() {
   console.log('[TAB_LAYOUT] AppUser groupId:', appUser?.groupId);
   console.log('[TAB_LAYOUT] Group members count:', currentGroup?.members?.length);
   
-  // Show loading screen while checking authentication
-  if (loading) {
+  // Show loading screen while checking authentication or syncing user data
+  if (loading || userSyncing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={styles.loadingText}>Checking authentication...</Text>
+        <AppLogo size={80} variant="icon" showShadow={true} />
+        <ActivityIndicator size="large" color={Colors.primary} style={styles.loadingSpinner} />
+        <Text style={styles.loadingText}>
+          {loading ? 'Checking authentication...' : 'Loading your data...'}
+        </Text>
       </View>
     );
   }
@@ -115,6 +119,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: Colors.background,
+  },
+  loadingSpinner: {
+    marginTop: 20,
+    marginBottom: 10,
   },
   loadingText: {
     marginTop: 10,

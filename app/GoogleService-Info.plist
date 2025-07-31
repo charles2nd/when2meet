@@ -1,23 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  TEMPLATE FILE - Replace with your actual GoogleService-Info.plist
+  
+  SECURITY WARNING: This file contains sensitive Firebase credentials!
+  
+  Setup Instructions:
+  1. Go to Firebase Console: https://console.firebase.google.com/
+  2. Select your project
+  3. Go to Project Settings > General
+  4. Under 'Your apps', click on iOS app or 'Add app' if not created
+  5. Download GoogleService-Info.plist and replace this file
+  6. Make sure bundle ID matches: com.when2meet.app
+  7. NEVER commit this file to version control with real credentials
+  
+  For production apps, use EAS Build secrets or environment-based configuration
+-->
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>813315873167-hhph3ruc9e6aldb66ip06v0najd024ki.apps.googleusercontent.com</string>
+	<string>000000000000-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.813315873167-hhph3ruc9e6aldb66ip06v0najd024ki</string>
+	<string>com.googleusercontent.apps.000000000000-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</string>
 	<key>API_KEY</key>
-	<string>AIzaSyAe6-39BY1YqfjB8Ly5bB4YZfL2BGBzhT8</string>
+	<string>your-ios-api-key</string>
 	<key>GCM_SENDER_ID</key>
-	<string>813315873167</string>
+	<string>000000000000</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.when2meet.app</string>
 	<key>PROJECT_ID</key>
-	<string>when2meet-87a7a</string>
+	<string>your-project-id</string>
 	<key>STORAGE_BUCKET</key>
-	<string>when2meet-87a7a.firebasestorage.app</string>
+	<string>your-project-id.appspot.com</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -29,8 +45,8 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:813315873167:ios:5ea04f13bd6a45715a13fa</string>
+	<string>1:000000000000:ios:0000000000000000000000</string>
 	<key>DATABASE_URL</key>
-	<string>https://when2meet-87a7a-default-rtdb.firebaseio.com</string>
+	<string>https://your-project-id-default-rtdb.firebaseio.com</string>
 </dict>
 </plist>

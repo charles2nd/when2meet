@@ -68,29 +68,37 @@ export class FirebaseGroupService {
   /**
    * Check if group name is unique in Firebase
    */
-  static async isGroupNameUnique(name: string): Promise<boolean> {
-    console.log('[FIREBASE_GROUP] Checking name uniqueness in Firebase:', name);
+  // REMOVED: Group names can now be duplicated - only codes must be unique
+  // Groups are identified by their unique 6-character codes, not names
+
+  /**
+   * Find a group by its unique code
+   */
+  static async findGroupByCode(code: string): Promise<Group | null> {
+    console.log('[FIREBASE_GROUP] Finding group by code:', code);
     
     try {
-      const cleanName = name.trim().toLowerCase();
+      const cleanCode = code.trim().toUpperCase();
       const groupsQuery = query(
         collection(db, this.GROUPS_COLLECTION),
-        where('nameSearchable', '==', cleanName)
+        where('code', '==', cleanCode)
       );
       const snapshot = await getDocs(groupsQuery);
       
-      const isUnique = snapshot.empty;
-      console.log('[FIREBASE_GROUP] Name unique check result:', isUnique, 'for name:', name);
-      
-      if (!isUnique) {
-        console.log('[FIREBASE_GROUP] Found existing groups with same name:', snapshot.docs.map(doc => doc.data().name));
+      if (snapshot.empty) {
+        console.log('[FIREBASE_GROUP] No group found with code:', cleanCode);
+        return null;
       }
       
-      return isUnique;
+      const groupData = snapshot.docs[0].data();
+      const group = Group.fromJSON(groupData as IGroup);
+      console.log('[FIREBASE_GROUP] Found group:', group.name, 'Code:', group.code);
+      
+      return group;
     } catch (error) {
-      console.error('[FIREBASE_GROUP] Error checking name uniqueness:', error);
-      // On error, fallback to local check
-      return await LocalStorage.isGroupNameUnique(name);
+      console.error('[FIREBASE_GROUP] Error finding group by code:', error);
+      // Fallback to local storage
+      return await LocalStorage.findGroupByCode(code);
     }
   }
 
@@ -104,11 +112,7 @@ export class FirebaseGroupService {
     console.log('[FIREBASE_GROUP] Creating new group:', groupData.name);
     
     try {
-      // Check for unique name in Firebase first
-      const isNameUnique = await this.isGroupNameUnique(groupData.name.trim());
-      if (!isNameUnique) {
-        throw new Error(`Group name "${groupData.name.trim()}" already exists in database`);
-      }
+      // Names can be duplicated - only codes must be unique
 
       // Generate unique code
       const uniqueCode = await LocalStorage.generateUniqueGroupCode();
@@ -134,7 +138,7 @@ export class FirebaseGroupService {
       const groupRef = doc(db, this.GROUPS_COLLECTION, group.id);
       batch.set(groupRef, {
         ...group.toJSON(),
-        nameSearchable: group.name.toLowerCase(), // For case-insensitive search
+        // Removed nameSearchable - names can be duplicated, codes are unique identifiers
         memberDetails: [{
           id: groupData.adminUser.id,
           name: groupData.adminUser.name,

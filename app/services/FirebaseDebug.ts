@@ -34,8 +34,7 @@ export class FirebaseDebug {
         console.log(`[FIREBASE_DEBUG] Group ${index + 1}:`, {
           id: doc.id,
           name: data.name,
-          nameSearchable: data.nameSearchable,
-          code: data.code,
+          code: data.code, // Primary identifier - must be unique
           members: data.members,
           memberCount: data.members ? data.members.length : 0,
           adminId: data.adminId,

@@ -21,9 +21,9 @@ describe('Authentication Flow with Database', () => {
 
   test('should complete full auth flow and store user data', async () => {
     const mockUser = {
-      uid: 'demo-admin-uid',
-      email: 'admin@admin.com',
-      displayName: 'Admin',
+      uid: 'secure-demo-admin-1234567890',
+      email: 'admin@demo.local',
+      displayName: 'Demo Admin',
       role: 'admin'
     };
 
@@ -34,8 +34,8 @@ describe('Authentication Flow with Database', () => {
     const AsyncStorage = require('@react-native-async-storage/async-storage');
     AsyncStorage.setItem.mockResolvedValue();
 
-    // Test sign in
-    const user = await signInAsDemo('admin@admin.com', 'admin');
+    // Test sign in with new secure demo credentials
+    const user = await signInAsDemo('admin@demo.local', 'demo-admin-2024');
     expect(user).toEqual(mockUser);
 
     // Test setting user ID in storage
@@ -43,7 +43,7 @@ describe('Authentication Flow with Database', () => {
     expect(setUserResult).toBe(true);
     expect(AsyncStorage.setItem).toHaveBeenCalledWith(
       'currentUserId',
-      JSON.stringify('demo-admin-uid')
+      JSON.stringify('secure-demo-admin-1234567890')
     );
   });
 
@@ -57,9 +57,9 @@ describe('Authentication Flow with Database', () => {
       name: 'Test Team',
       description: 'Test team created after auth',
       members: [{
-        id: 'demo-admin-uid',
-        name: 'Admin',
-        email: 'admin@admin.com',
+        id: 'secure-demo-admin-1234567890',
+        name: 'Demo Admin',
+        email: 'admin@demo.local',
         role: 'member',
         joinedAt: new Date().toISOString()
       }],
@@ -82,9 +82,9 @@ describe('Authentication Flow with Database', () => {
     AsyncStorage.setItem.mockResolvedValue();
 
     const availability = {
-      id: 'team-test-123-demo-admin-uid-2024-01',
+      id: 'team-test-123-secure-demo-admin-1234567890-2024-01',
       teamId: 'team-test-123',
-      memberId: 'demo-admin-uid',
+      memberId: 'secure-demo-admin-1234567890',
       month: '2024-01',
       availability: {
         '2024-01-15-9': true,

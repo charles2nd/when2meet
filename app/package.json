@@ -40,7 +40,8 @@
     "react-native-screens": "~4.11.1",
     "react-native-svg": "^15.11.2",
     "react-native-web": "~0.20.0",
-    "expo-updates": "~0.28.17"
+    "expo-updates": "~0.28.17",
+    "expo-clipboard": "~7.1.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -50,6 +51,12 @@
     "jest-expo": "~53.0.9",
     "react-test-renderer": "19.0.0",
     "typescript": "~5.8.3"
+  },
+  "overrides": {
+    "undici": "^6.21.1"
+  },
+  "resolutions": {
+    "undici": "^6.21.1"
   },
   "private": true
 }

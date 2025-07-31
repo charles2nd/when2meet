@@ -39,9 +39,13 @@ yarn-error.*
 .env.staging
 *.env
 
-# Firebase config files (if using native SDK)
-google-services.json
-GoogleService-Info.plist
+# Firebase config files with real credentials - NEVER COMMIT REAL CREDENTIALS!
+# Keep template files in repo, but never commit files with real Firebase credentials
+google-services.json.real
+GoogleService-Info.plist.real
+*-firebase-config.json
+*-google-services.json
+*-GoogleService-Info.plist
 
 # API Keys and secrets
 secrets.json

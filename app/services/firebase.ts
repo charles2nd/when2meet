@@ -45,18 +45,37 @@ try {
   googleSigninAvailable = false;
 }
 
-// Firebase configuration - DEMO PROJECT (Working Configuration)
-// This is a functional demo project for testing Firebase connection
+// Firebase configuration - ENVIRONMENT VARIABLES REQUIRED
+// All credentials must be provided via environment variables for security
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyBkLjmXg7QdlQ1kFr6H8YFXnJ2tR5sX6KE",
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "when2meet-87a7a.firebaseapp.com",
-  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL || "https://when2meet-87a7a-default-rtdb.firebaseio.com/",
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "when2meet-87a7a",
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "when2meet-87a7a.firebasestorage.app",
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "445362077095",
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:445362077095:web:8f9b5c3d4e2a1b6c7d8e9f",
-  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-DEMO12345"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
+
+// Validate required environment variables
+const requiredEnvVars = [
+  'EXPO_PUBLIC_FIREBASE_API_KEY',
+  'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN',
+  'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
+  'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
+  'EXPO_PUBLIC_FIREBASE_APP_ID'
+];
+
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+if (missingVars.length > 0) {
+  console.error('[FIREBASE] ❌ MISSING REQUIRED ENVIRONMENT VARIABLES:');
+  missingVars.forEach(varName => {
+    console.error(`[FIREBASE] - ${varName}`);
+  });
+  console.error('[FIREBASE] Please check your .env file and ensure all Firebase configuration variables are set');
+  throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+}
 
 // Initialize Firebase app
 console.log('[FIREBASE] ========================================');
@@ -84,9 +103,12 @@ let googleSignInConfigured = false;
 const configureGoogleSignIn = async () => {
   if (Platform.OS !== 'web' && !googleSignInConfigured && googleSigninAvailable && GoogleSignin) {
     try {
-      // Use proper Web Client ID from Firebase config or environment
-      const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 
-        `${firebaseConfig.appId.split(':')[1]}-${firebaseConfig.appId.split(':')[2]}.apps.googleusercontent.com`;
+      // Use proper Web Client ID from environment variables
+      const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+      
+      if (!webClientId) {
+        throw new Error('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID not found in environment variables');
+      }
       
       await GoogleSignin.configure({
         webClientId: webClientId,
@@ -364,18 +386,29 @@ export const signInWithGoogle = async (): Promise<UserRole | null> => {
       
       // Get Google credentials
       const userInfo = await GoogleSignin.signIn();
-      console.log('[FIREBASE AUTH] ✅ Google Sign-In successful, got user info:', {
-        email: userInfo.user.email,
-        name: userInfo.user.name,
-        hasIdToken: !!userInfo.idToken
+      console.log('[FIREBASE AUTH] ✅ Google Sign-In successful, raw response:', userInfo);
+      
+      // Validate userInfo structure - check both possible structures
+      const userData = userInfo.data?.user || userInfo.user;
+      const idToken = userInfo.data?.idToken || userInfo.idToken;
+      
+      if (!userData) {
+        console.error('[FIREBASE AUTH] ❌ Invalid userInfo structure:', userInfo);
+        throw new Error('Invalid Google Sign-In response - missing user data');
+      }
+      
+      console.log('[FIREBASE AUTH] User data extracted:', {
+        email: userData.email || 'No email',
+        name: userData.name || 'No name',
+        hasIdToken: !!idToken
       });
       
-      if (!userInfo.idToken) {
+      if (!idToken) {
         throw new Error('No ID token received from Google Sign-In');
       }
       
       // Create Firebase credential from Google token
-      const googleCredential = GoogleAuthCredential.credential(userInfo.idToken);
+      const googleCredential = GoogleAuthCredential.credential(idToken);
       console.log('[FIREBASE AUTH] ✅ Google credential created');
       
       // Sign in to Firebase with Google credential
@@ -493,11 +526,12 @@ export const sendEmailLink = async (email: string): Promise<void> => {
     
     const actionCodeSettings = {
       // URL you want to redirect back to. The domain must be whitelisted in Firebase Console.
+      // Use Firebase Auth action handler (works without hosting)
       url: Platform.OS === 'web' 
         ? `${window.location.origin}/finishSignIn` 
-        : 'when2meet://finishSignIn',
+        : 'https://when2meet-87a7a.firebaseapp.com/__/auth/action',
       handleCodeInApp: true,
-      // Android and iOS deep link settings
+      // Android and iOS deep link settings - NO NOTIFICATIONS
       iOS: {
         bundleId: 'com.when2meet.app',
       },
@@ -505,7 +539,7 @@ export const sendEmailLink = async (email: string): Promise<void> => {
         packageName: 'com.when2meet.app',
         installApp: false,
         minimumVersion: '12'
-      },
+      }
     };
     
     console.log('[FIREBASE AUTH] Action code settings:', actionCodeSettings);
@@ -587,27 +621,59 @@ export const checkEmailLinkSignIn = async (): Promise<{ email: string | null, is
   }
 };
 
-// Demo authentication for testing
+// Demo authentication for development/testing ONLY
+// SECURITY WARNING: This should NEVER be enabled in production!
 export const signInAsDemo = async (email: string, password: string): Promise<UserRole | null> => {
+  // Check if demo mode is explicitly enabled
+  const isDemoModeEnabled = process.env.EXPO_PUBLIC_ENABLE_DEMO_AUTH === 'true' || 
+                            process.env.NODE_ENV === 'development';
+  
+  if (!isDemoModeEnabled) {
+    console.error('[FIREBASE DEMO] ❌ Demo authentication is DISABLED');
+    console.error('[FIREBASE DEMO] This is a security feature to prevent unauthorized access');
+    console.error('[FIREBASE DEMO] To enable demo mode for development, set: EXPO_PUBLIC_ENABLE_DEMO_AUTH=true');
+    return null;
+  }
+  
+  // Security warning for demo mode
+  console.warn('[FIREBASE DEMO] ⚠️  SECURITY WARNING: Demo authentication is ENABLED');
+  console.warn('[FIREBASE DEMO] This bypasses all security checks and should NEVER be used in production');
+  console.warn('[FIREBASE DEMO] Ensure EXPO_PUBLIC_ENABLE_DEMO_AUTH is set to false in production');
+  
   return new Promise((resolve) => {
     setTimeout(() => {
-      if (email === 'admin@admin.com' && password === 'admin') {
+      // Validate input parameters
+      if (!email || !password || email.trim().length === 0 || password.trim().length === 0) {
+        console.error('[FIREBASE DEMO] Invalid credentials: email and password required');
+        resolve(null);
+        return;
+      }
+      
+      // More secure demo authentication with specific allowed accounts
+      const allowedDemoAccounts = [
+        { email: 'admin@demo.local', password: 'demo-admin-2024', role: 'admin' as const },
+        { email: 'user@demo.local', password: 'demo-user-2024', role: 'user' as const }
+      ];
+      
+      const account = allowedDemoAccounts.find(
+        acc => acc.email === email && acc.password === password
+      );
+      
+      if (account) {
         const demoUser: UserRole = {
-          uid: 'demo-admin-uid',
-          email: 'admin@admin.com',
-          displayName: 'Admin',
-          role: 'admin'
+          uid: `secure-demo-${account.role}-${Date.now()}`,
+          email: account.email,
+          displayName: account.role === 'admin' ? 'Demo Admin' : 'Demo User',
+          role: account.role
         };
-        resolve(demoUser);
-      } else if (email && password) {
-        const demoUser: UserRole = {
-          uid: `demo-user-${Date.now()}`,
-          email: email,
-          displayName: email.split('@')[0],
-          role: 'user'
-        };
+        console.log('[FIREBASE DEMO] ✅ Demo authentication successful for:', account.role);
         resolve(demoUser);
       } else {
+        console.error('[FIREBASE DEMO] ❌ Invalid demo credentials');
+        console.error('[FIREBASE DEMO] Allowed demo accounts:');
+        allowedDemoAccounts.forEach(acc => {
+          console.error(`[FIREBASE DEMO] - ${acc.email} (${acc.role})`);
+        });
         resolve(null);
       }
     }, 1000);

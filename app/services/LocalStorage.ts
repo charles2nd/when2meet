@@ -132,13 +132,8 @@ export class LocalStorage {
     return !groups.some(g => g.code === code.toUpperCase() && g.id !== excludeGroupId);
   }
 
-  static async isGroupNameUnique(name: string, excludeGroupId?: string): Promise<boolean> {
-    console.log('[STORAGE] Checking if group name is unique:', name);
-    const groups = await this.getAllGroups();
-    return !groups.some(g => 
-      g.name.toLowerCase() === name.toLowerCase() && g.id !== excludeGroupId
-    );
-  }
+  // REMOVED: Group names can now be duplicated - only codes must be unique
+  // Use findGroupByCode() and generateUniqueGroupCode() for code-based operations
 
   static async generateUniqueGroupCode(): Promise<string> {
     const maxAttempts = 100;
@@ -351,6 +346,28 @@ export class LocalStorage {
 
   static sanitizeName(name: string): string {
     return this.validateInput(name, 100);
+  }
+
+  // User Preferences Management
+  static async saveUserDefaultTimeRange(userId: string, startTime: number, endTime: number): Promise<void> {
+    console.log('[STORAGE] Saving default time range for user:', userId, `${startTime}:00-${endTime}:00`);
+    const key = `user_default_time_${userId}`;
+    const timeRange = { startTime, endTime };
+    await AsyncStorage.setItem(key, JSON.stringify(timeRange));
+  }
+
+  static async getUserDefaultTimeRange(userId: string): Promise<{ startTime: number; endTime: number } | null> {
+    console.log('[STORAGE] Loading default time range for user:', userId);
+    const key = `user_default_time_${userId}`;
+    const data = await AsyncStorage.getItem(key);
+    if (!data) return null;
+    return JSON.parse(data);
+  }
+
+  static async removeUserDefaultTimeRange(userId: string): Promise<void> {
+    console.log('[STORAGE] Removing default time range for user:', userId);
+    const key = `user_default_time_${userId}`;
+    await AsyncStorage.removeItem(key);
   }
 
   // Clear all data

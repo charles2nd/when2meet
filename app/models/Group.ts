@@ -24,7 +24,7 @@ export class Group implements IGroup {
     this.createdAt = data.createdAt || new Date().toISOString();
   }
 
-  // Validation method
+  // Validation method - updated to remove name uniqueness requirement
   validate(): { isValid: boolean; errors: string[] } {
     const errors: string[] = [];
     

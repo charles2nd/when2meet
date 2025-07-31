@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 import { getWebStyle } from '../utils/webStyles';
+import { AppLogo } from '../components/AppLogo';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 import { translations } from '../services/translations';
 import { sendEmailLink, checkEmailLinkSignIn, completeSignInWithEmailLink } from '../services/firebase';
@@ -96,33 +97,6 @@ const PasswordlessLoginScreen: React.FC = () => {
     }
   };
 
-  const handleDemoLogin = async () => {
-    setIsLoading(true);
-    try {
-      const success = await signIn('demo@demo.com', 'demo123');
-      if (success) {
-        router.replace('/(tabs)/group');
-      }
-    } catch (error) {
-      console.error('[LOGIN] Demo login error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleAdminDemo = async () => {
-    setIsLoading(true);
-    try {
-      const success = await signIn('admin@admin.com', 'admin');
-      if (success) {
-        router.replace('/(tabs)/group');
-      }
-    } catch (error) {
-      console.error('[LOGIN] Admin demo error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleGoogleLogin = async () => {
     try {
@@ -156,12 +130,7 @@ const PasswordlessLoginScreen: React.FC = () => {
           style={styles.header}
         >
           <View style={styles.logoContainer}>
-            <LinearGradient
-              colors={[Colors.accent, '#FF6F00']}
-              style={styles.logoGradient}
-            >
-              <Ionicons name="calendar" size={32} color={Colors.text.inverse} />
-            </LinearGradient>
+            <AppLogo size={70} variant="icon" showShadow={true} />
           </View>
           <Text style={styles.appTitle}>When2Meet</Text>
           <Text style={styles.appSubtitle}>Find the perfect meeting time</Text>
@@ -252,29 +221,6 @@ const PasswordlessLoginScreen: React.FC = () => {
               <Text style={styles.googleText}>Continue with Google</Text>
             </TouchableOpacity>
 
-            {/* Demo Buttons */}
-            <View style={styles.demoContainer}>
-              <Text style={styles.demoTitle}>Quick Demo:</Text>
-              <View style={styles.demoButtons}>
-                <TouchableOpacity 
-                  style={[styles.demoButton, getWebStyle('touchableOpacity')]} 
-                  onPress={handleDemoLogin}
-                  disabled={isLoading}
-                >
-                  <Ionicons name="person-outline" size={16} color={Colors.secondary} />
-                  <Text style={styles.demoText}>User Demo</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.demoButton, styles.adminDemoButton, getWebStyle('touchableOpacity')]} 
-                  onPress={handleAdminDemo}
-                  disabled={isLoading}
-                >
-                  <Ionicons name="shield-outline" size={16} color={Colors.accent} />
-                  <Text style={[styles.demoText, styles.adminDemoText]}>Admin Demo</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
           </View>
         </View>
       </ScrollView>
@@ -439,49 +385,6 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.md,
     fontWeight: Typography.weights.medium,
     color: Colors.text.primary,
-  },
-  demoContainer: {
-    marginTop: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border.light,
-  },
-  demoTitle: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.medium,
-    color: Colors.text.secondary,
-    textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  demoButtons: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  demoButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.tactical.light,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-    borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-    gap: Spacing.xs,
-  },
-  adminDemoButton: {
-    borderColor: Colors.accent,
-    backgroundColor: 'rgba(255, 152, 0, 0.1)',
-  },
-  demoText: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.medium,
-    color: Colors.secondary,
-  },
-  adminDemoText: {
-    color: Colors.accent,
   },
 });
 

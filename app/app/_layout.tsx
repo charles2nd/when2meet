@@ -1,10 +1,10 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { useColorScheme, Linking } from 'react-native';
 import 'react-native-reanimated';
 
 import { AppProvider } from '../contexts/AppContext';
@@ -49,6 +49,50 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const router = useRouter();
+  const segments = useSegments();
+
+  // Handle deep links
+  useEffect(() => {
+    // Handle initial URL when app is opened from a link
+    const handleInitialURL = async () => {
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl) {
+        handleDeepLink(initialUrl);
+      }
+    };
+
+    // Handle URL when app is already open
+    const subscription = Linking.addEventListener('url', (event) => {
+      handleDeepLink(event.url);
+    });
+
+    handleInitialURL();
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  const handleDeepLink = (url: string) => {
+    console.log('[DEEP_LINK] Received URL:', url);
+    
+    // Parse the URL to extract the group code
+    const match = url.match(/join\/([A-Z0-9]+)/i);
+    if (match && match[1]) {
+      const groupCode = match[1].toUpperCase();
+      console.log('[DEEP_LINK] Extracted group code:', groupCode);
+      
+      // Store the code temporarily and navigate to the group screen
+      // The group screen will handle the join logic
+      setTimeout(() => {
+        router.push({
+          pathname: '/(tabs)/group',
+          params: { inviteCode: groupCode }
+        });
+      }, 500); // Small delay to ensure navigation is ready
+    }
+  };
 
   return (
     <AuthProvider>
@@ -68,4 +112,3 @@ function RootLayoutNav() {
   );
 }
 
-export default RootLayout;
