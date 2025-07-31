@@ -27,8 +27,7 @@ interface AppContextType {
   isLoading: boolean;
   userSyncing: boolean;
   
-  // Actions
-  login: (name: string, email: string) => Promise<void>;
+  // Actions  
   logout: () => Promise<void>;
   createGroup: (name: string) => Promise<Group>;
   joinGroup: (code: string) => Promise<boolean>;
@@ -105,9 +104,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const tempUser = new User({
           id: authUser.uid,
           name: authUser.displayName || 'User',
-          email: authUser.email,
+          email: authUser.email || undefined,
+          phoneNumber: authUser.phoneNumber || undefined,
           language: language,
-          groupId: undefined // Will be set after groups are loaded
+          groupId: undefined, // Will be set after groups are loaded
+          authMethod: authUser.authMethod || (authUser.phoneNumber ? 'phone' : authUser.email ? 'email' : 'google')
         });
         
         // Update user data in Firebase to ensure consistency
@@ -139,9 +140,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 finalUser = new User({
                   id: authUser.uid,
                   name: authUser.displayName || 'User',
-                  email: authUser.email,
+                  email: authUser.email || undefined,
+                  phoneNumber: authUser.phoneNumber || undefined,
                   language: language,
-                  groupId: currentGroup.id
+                  groupId: currentGroup.id,
+                  authMethod: authUser.authMethod || (authUser.phoneNumber ? 'phone' : authUser.email ? 'email' : 'google')
                 });
                 console.log('[APP] Restored current group from saved data:', currentGroup.name);
               }
@@ -262,12 +265,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const login = async (name: string, email: string) => {
-    console.log('[APP] Logging in:', email);
-    const newUser = new User({ name, email, language });
-    setUser(newUser);
-    await LocalStorage.saveUser(newUser);
-  };
 
   const logout = async () => {
     console.log('[APP] Logging out...');
@@ -309,13 +306,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       
       console.log('[APP] Group created successfully with Firebase:', firebaseGroup.toJSON());
     
-    // Update user with group association
+    // Update user with group association - preserve all user fields
     const updatedUser = new User({
       id: user.id,
       name: user.name,
       email: user.email,
+      phoneNumber: user.phoneNumber,
       language: user.language,
-      groupId: firebaseGroup.id
+      groupId: firebaseGroup.id,
+      authMethod: user.authMethod
     });
     setUser(updatedUser);
     await LocalStorage.saveUser(updatedUser);
@@ -339,9 +338,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (error) {
       console.error('[APP] Firebase group creation failed, using local fallback:', error);
       
-      // Don't use local fallback if the error is about duplicate names
-      if (error.message && error.message.includes('already exists')) {
-        throw error; // Re-throw the duplicate name error
+      // Don't use local fallback if the error is about duplicate codes (names are allowed to be duplicated)
+      if (error.message && error.message.includes('code') && error.message.includes('already exists')) {
+        throw error; // Re-throw the duplicate code error
       }
       
       // Fallback to local storage only for network/connection errors
@@ -366,8 +365,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         id: user.id,
         name: user.name,
         email: user.email,
+        phoneNumber: user.phoneNumber,
         language: user.language,
-        groupId: localGroup.id
+        groupId: localGroup.id,
+        authMethod: user.authMethod
       });
       setUser(updatedUser);
       await LocalStorage.saveUser(updatedUser);
@@ -446,8 +447,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       id: user.id,
       name: user.name,
       email: user.email,
+      phoneNumber: user.phoneNumber,
       language: user.language,
-      groupId: group.id
+      groupId: group.id,
+      authMethod: user.authMethod
     });
     setUser(updatedUserJoin);
     await LocalStorage.saveUser(updatedUserJoin);
@@ -587,8 +590,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           id: user.id,
           name: user.name,
           email: user.email,
+          phoneNumber: user.phoneNumber,
           language: lang,
-          groupId: user.groupId
+          groupId: user.groupId,
+          authMethod: user.authMethod
         });
         setUser(updatedUser);
         await LocalStorage.saveUser(updatedUser);
@@ -613,7 +618,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     groupAvailabilities,
     isLoading,
     userSyncing,
-    login,
     logout,
     createGroup,
     joinGroup,

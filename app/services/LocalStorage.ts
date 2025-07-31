@@ -14,19 +14,15 @@ export class LocalStorage {
       throw new Error(`Invalid user data: ${validation.errors.join(', ')}`);
     }
     
-    // Check for unique email
-    const isEmailUnique = await this.isUserEmailUnique(user.email, user.id);
-    if (!isEmailUnique) {
-      throw new Error(`Email "${user.email}" is already in use`);
-    }
-    
     // Sanitize user data
     user.sanitize();
     
     await AsyncStorage.setItem('current_user', JSON.stringify(user.toJSON()));
     
-    // Also store in all users registry for uniqueness checking
-    await this.addUserToRegistry(user);
+    // Store user in registry for phone number uniqueness checking (if phone auth)
+    if (user.phoneNumber) {
+      await this.addUserToRegistry(user);
+    }
   }
 
   static async getUser(): Promise<User | null> {
@@ -41,7 +37,7 @@ export class LocalStorage {
     
     // Get current user first to remove from registry
     const currentUser = await this.getUser();
-    if (currentUser) {
+    if (currentUser && currentUser.phoneNumber) {
       await this.removeUserFromRegistry(currentUser.id);
     }
     
@@ -71,13 +67,7 @@ export class LocalStorage {
         throw new Error(`Group code ${group.code} already exists`);
       }
       
-      // Check for duplicate names (case-insensitive)
-      const duplicateByName = existingGroups.find(g => 
-        g.id !== group.id && g.name.toLowerCase() === group.name.toLowerCase()
-      );
-      if (duplicateByName) {
-        throw new Error(`Group name "${group.name}" already exists`);
-      }
+      // Group names can be duplicated - only codes must be unique
     }
     
     await AsyncStorage.setItem(`group_${group.id}`, JSON.stringify(group.toJSON()));
@@ -217,16 +207,7 @@ export class LocalStorage {
         };
       }
       
-      // Check for duplicate names (case-insensitive)
-      const duplicateByName = existingGroups.find(g => 
-        g.id !== group.id && g.name.toLowerCase() === group.name.toLowerCase()
-      );
-      if (duplicateByName) {
-        return { 
-          isValid: false, 
-          error: `Group name "${group.name}" already exists` 
-        };
-      }
+      // Group names can be duplicated - only codes must be unique
       
       return { isValid: true };
     } catch (error) {
@@ -237,17 +218,18 @@ export class LocalStorage {
     }
   }
 
-  // User uniqueness management
+  // User uniqueness management (phone-based)
   static async addUserToRegistry(user: User): Promise<void> {
     try {
       const registryData = await AsyncStorage.getItem('user_registry');
-      const registry: { [key: string]: { id: string; email: string; name: string } } = 
+      const registry: { [key: string]: { id: string; phoneNumber?: string; name: string; authMethod: string } } = 
         registryData ? JSON.parse(registryData) : {};
       
       registry[user.id] = {
         id: user.id,
-        email: user.email,
-        name: user.name
+        phoneNumber: user.phoneNumber,
+        name: user.name,
+        authMethod: user.authMethod
       };
       
       await AsyncStorage.setItem('user_registry', JSON.stringify(registry));
@@ -269,38 +251,40 @@ export class LocalStorage {
     }
   }
 
-  static async isUserEmailUnique(email: string, excludeUserId?: string): Promise<boolean> {
+  static async isUserPhoneUnique(phoneNumber: string, excludeUserId?: string): Promise<boolean> {
     try {
+      if (!phoneNumber) return true; // No phone number means no conflict
+      
       const registryData = await AsyncStorage.getItem('user_registry');
       if (!registryData) return true;
       
       const registry = JSON.parse(registryData);
-      const normalizedEmail = email.toLowerCase();
       
       for (const userId in registry) {
         if (userId !== excludeUserId && 
-            registry[userId].email.toLowerCase() === normalizedEmail) {
+            registry[userId].phoneNumber === phoneNumber) {
           return false;
         }
       }
       
       return true;
     } catch (error) {
-      console.error('[STORAGE] Error checking email uniqueness:', error);
-      return false;
+      console.error('[STORAGE] Error checking phone uniqueness:', error);
+      return true; // Default to allowing if error occurs
     }
   }
 
-  static async getUserByEmail(email: string): Promise<User | null> {
+  static async getUserByPhone(phoneNumber: string): Promise<User | null> {
     try {
+      if (!phoneNumber) return null;
+      
       const registryData = await AsyncStorage.getItem('user_registry');
       if (!registryData) return null;
       
       const registry = JSON.parse(registryData);
-      const normalizedEmail = email.toLowerCase();
       
       for (const userId in registry) {
-        if (registry[userId].email.toLowerCase() === normalizedEmail) {
+        if (registry[userId].phoneNumber === phoneNumber) {
           // Try to get the full user data
           const userData = await AsyncStorage.getItem(`user_${userId}`);
           if (userData) {
@@ -311,7 +295,7 @@ export class LocalStorage {
       
       return null;
     } catch (error) {
-      console.error('[STORAGE] Error finding user by email:', error);
+      console.error('[STORAGE] Error finding user by phone:', error);
       return null;
     }
   }

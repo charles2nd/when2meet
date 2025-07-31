@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UserRole, signInWithGoogle, signInAsDemo, signOutUser, signUpWithEmailAndPassword, signInWithEmailPassword, onAuthStateChange, getFirebaseSetupInstructions, sendEmailLink, completeSignInWithEmailLink } from '../services/firebase';
+import { UserRole, signInWithGoogle, signInAsDemo, signOutUser, signUpWithEmailAndPassword, signInWithEmailPassword, onAuthStateChange, getFirebaseSetupInstructions, sendEmailLink, completeSignInWithEmailLink, sendPhoneVerificationCode, verifyPhoneCode } from '../services/firebase';
+import SecurePhoneAuthService from '../services/SecurePhoneAuthService';
 import { FirebaseStorageService } from '../services/FirebaseStorageService';
 import { LocalStorage } from '../services/LocalStorage';
 import { SessionManager } from '../services/SessionManager';
@@ -11,6 +12,8 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<boolean>;
   signUp: (email: string, password: string, displayName?: string) => Promise<boolean>;
   signInGoogle: () => Promise<boolean>;
+  signInPhone: (phoneNumber: string, recaptchaVerifier?: any) => Promise<any>;
+  verifyPhoneCode: (confirmation: any, code: string, sessionId?: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   sendSignInLink: (email: string) => Promise<void>;
   completeEmailLinkSignIn: (email: string, emailLink: string) => Promise<boolean>;
@@ -351,6 +354,76 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const signInPhone = async (phoneNumber: string, recaptchaVerifier?: any): Promise<any> => {
+    try {
+      setLoading(true);
+      console.log('[AUTH] Phone sign in attempt for:', phoneNumber);
+      
+      // Use our SecurePhoneAuthService instead of Firebase directly
+      const result = await SecurePhoneAuthService.sendVerificationCode(phoneNumber);
+      console.log('[AUTH] SecurePhoneAuthService result:', result);
+      console.log('[AUTH] Result type:', typeof result);
+      console.log('[AUTH] Result keys:', result ? Object.keys(result) : 'null');
+      
+      if (result && result.confirmationResult && result.sessionId) {
+        console.log('[AUTH] ✅ Valid result structure returned');
+        return result;
+      } else {
+        console.error('[AUTH] ❌ Invalid result structure from SecurePhoneAuthService:', result);
+        throw new Error('Invalid response from phone authentication service');
+      }
+    } catch (error: any) {
+      console.error('[AUTH] Phone sign in error:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyPhoneCodeAuth = async (confirmation: any, code: string, sessionId?: string): Promise<boolean> => {
+    try {
+      setLoading(true);
+      console.log('[AUTH] Verifying phone code with SecurePhoneAuthService');
+      
+      // Use our SecurePhoneAuthService to verify the code
+      const result = await SecurePhoneAuthService.verifyCode(confirmation, code, sessionId || '');
+      
+      if (result && result.user) {
+        // Create UserRole object from the result
+        const userData: UserRole = {
+          uid: result.user.uid,
+          phoneNumber: result.user.phoneNumber,
+          displayName: result.user.displayName || 'Phone User',
+          role: 'user',
+          authMethod: 'phone'
+        };
+        
+        console.log('[AUTH] ✅ Phone verification successful, setting user:', userData);
+        
+        // Set user state immediately
+        setUser(userData);
+        
+        // Save session for persistence
+        await SessionManager.saveSession(userData);
+        console.log('[AUTH] ✅ Session saved successfully');
+        
+        // Trigger login success for navigation
+        setLoginTrigger(prev => prev + 1);
+        console.log('[AUTH] ✅ Login trigger fired for navigation');
+        
+        return true;
+      }
+      
+      console.warn('[AUTH] Phone verification failed - no user data returned');
+      return false;
+    } catch (error: any) {
+      console.error('[AUTH] Phone verification error:', error);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getSessionInfo = async () => {
     return await SessionManager.getSessionInfo();
   };
@@ -361,6 +434,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     signIn,
     signUp,
     signInGoogle,
+    signInPhone,
+    verifyPhoneCode: verifyPhoneCodeAuth,
     signOut,
     sendSignInLink,
     completeEmailLinkSignIn,

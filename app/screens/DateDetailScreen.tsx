@@ -13,7 +13,17 @@ const DateDetailScreen: React.FC = () => {
   const params = useLocalSearchParams();
   const { user, currentGroup, groupAvailabilities, myAvailability, saveAvailability, loadGroupAvailabilities, t, language } = useApp();
   const router = useRouter();
-  const [currentDate, setCurrentDate] = useState<string>(params.date as string || new Date().toISOString().split('T')[0]);
+  const [currentDate, setCurrentDate] = useState<string>('');
+  
+  // Initialize currentDate with params in useEffect to avoid useInsertionEffect warning
+  useEffect(() => {
+    const dateParam = params.date as string;
+    if (dateParam) {
+      setCurrentDate(dateParam);
+    } else {
+      setCurrentDate(new Date().toISOString().split('T')[0]);
+    }
+  }, [params.date]);
   const [availableMembers, setAvailableMembers] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageText, setMessageText] = useState('');
@@ -483,6 +493,17 @@ const DateDetailScreen: React.FC = () => {
       </View>
     );
   };
+
+  // Prevent rendering until currentDate is initialized to avoid useInsertionEffect warnings
+  if (!currentDate) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView 
@@ -1071,6 +1092,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
     lineHeight: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginTop: 50,
   },
 });
 

@@ -13,7 +13,10 @@ import {
   isSignInWithEmailLink,
   signInWithEmailLink,
   signInWithCredential,
-  GoogleAuthProvider as GoogleAuthCredential
+  GoogleAuthProvider as GoogleAuthCredential,
+  signInWithPhoneNumber,
+  RecaptchaVerifier,
+  ConfirmationResult
 } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
@@ -319,23 +322,50 @@ console.log('[FIREBASE] ========================================');
 
 export interface UserRole {
   uid: string;
-  email: string;
+  email?: string;
+  phoneNumber?: string;
   displayName: string;
   role: 'admin' | 'user';
+  authMethod: 'email' | 'phone' | 'google';
 }
 
 export const isAdmin = (user: User | null): boolean => {
-  return user?.email === 'admin@admin.com' || user?.displayName === 'Admin';
+  if (!user) return false;
+  
+  // Check email-based admin
+  if (user.email === 'admin@admin.com' || user.displayName === 'Admin') {
+    return true;
+  }
+  
+  // Check phone-based admin (demo)
+  if (user.phoneNumber === '+1555999999' || user.displayName === 'Phone Admin') {
+    return true;
+  }
+  
+  return false;
 };
 
 export const getUserRole = (user: User | null): UserRole | null => {
   if (!user) return null;
   
+  // Determine auth method based on available data and provider
+  let authMethod: 'email' | 'phone' | 'google' = 'email';
+  
+  if (user.phoneNumber && !user.email) {
+    authMethod = 'phone';
+  } else if (user.providerData?.some((p: any) => p.providerId === 'google.com')) {
+    authMethod = 'google';
+  } else if (user.providerData?.some((p: any) => p.providerId === 'phone')) {
+    authMethod = 'phone';
+  }
+  
   return {
     uid: user.uid,
-    email: user.email || '',
-    displayName: user.displayName || '',
-    role: isAdmin(user) ? 'admin' : 'user'
+    email: user.email || undefined,
+    phoneNumber: user.phoneNumber || undefined,
+    displayName: user.displayName || user.phoneNumber || user.email || 'User',
+    role: isAdmin(user) ? 'admin' : 'user',
+    authMethod
   };
 };
 
@@ -664,7 +694,8 @@ export const signInAsDemo = async (email: string, password: string): Promise<Use
           uid: `secure-demo-${account.role}-${Date.now()}`,
           email: account.email,
           displayName: account.role === 'admin' ? 'Demo Admin' : 'Demo User',
-          role: account.role
+          role: account.role,
+          authMethod: 'email'
         };
         console.log('[FIREBASE DEMO] ✅ Demo authentication successful for:', account.role);
         resolve(demoUser);
@@ -680,6 +711,75 @@ export const signInAsDemo = async (email: string, password: string): Promise<Use
   });
 };
 
+// Phone Authentication Functions
+export const sendPhoneVerificationCode = async (
+  phoneNumber: string, 
+  recaptchaVerifier?: any
+): Promise<ConfirmationResult> => {
+  try {
+    console.log('[FIREBASE AUTH] ========================================');
+    console.log('[FIREBASE AUTH] PHONE VERIFICATION CODE SEND');
+    console.log('[FIREBASE AUTH] Phone Number:', phoneNumber);
+    console.log('[FIREBASE AUTH] ========================================');
+    
+    // Import and use the phone auth service
+    const { sendVerificationCode } = await import('./PhoneAuthService');
+    const confirmationResult = await sendVerificationCode(phoneNumber, recaptchaVerifier);
+    
+    console.log('[FIREBASE AUTH] ✅ Phone verification code sent successfully!');
+    console.log('[FIREBASE AUTH] ========================================');
+    
+    return confirmationResult;
+  } catch (error: any) {
+    console.error('[FIREBASE AUTH] ❌ PHONE VERIFICATION CODE FAILED');
+    console.error('[FIREBASE AUTH] Error code:', error.code);
+    console.error('[FIREBASE AUTH] Error message:', error.message);
+    console.error('[FIREBASE AUTH] ========================================');
+    throw error;
+  }
+};
+
+export const verifyPhoneCode = async (confirmation: ConfirmationResult, code: string): Promise<UserRole | null> => {
+  try {
+    console.log('[FIREBASE AUTH] ========================================');
+    console.log('[FIREBASE AUTH] PHONE CODE VERIFICATION'); 
+    console.log('[FIREBASE AUTH] Code length:', code.length);
+    console.log('[FIREBASE AUTH] ========================================');
+    
+    // Import and use the phone auth service
+    const { verifyCode } = await import('./PhoneAuthService');
+    const result = await verifyCode(confirmation, code);
+    
+    if (result && result.user) {
+      const userRole = getUserRole(result.user);
+      
+      // Save user profile
+      if (userRole) {
+        await saveUserProfile(userRole);
+        console.log('[FIREBASE AUTH] ✅ User profile saved');
+      }
+      
+      console.log('[FIREBASE AUTH] ✅ Phone verification successful!');
+      console.log('[FIREBASE AUTH] User details:', {
+        uid: result.user.uid,
+        phoneNumber: result.user.phoneNumber,
+        displayName: result.user.displayName
+      });
+      console.log('[FIREBASE AUTH] ========================================');
+      
+      return userRole;
+    }
+    
+    return null;
+  } catch (error: any) {
+    console.error('[FIREBASE AUTH] ❌ PHONE CODE VERIFICATION FAILED');
+    console.error('[FIREBASE AUTH] Error code:', error.code);
+    console.error('[FIREBASE AUTH] Error message:', error.message);
+    console.error('[FIREBASE AUTH] ========================================');
+    throw error;
+  }
+};
+
 export const signOutUser = async (): Promise<void> => {
   try {
     await signOut(auth);
@@ -692,13 +792,16 @@ export const signOutUser = async (): Promise<void> => {
 // User profile management in Firestore
 export const saveUserProfile = async (userRole: UserRole): Promise<void> => {
   try {
-    console.log('[FIREBASE] Saving user profile to Firestore:', userRole.email);
+    const identifier = userRole.email || userRole.phoneNumber || 'Unknown';
+    console.log('[FIREBASE] Saving user profile to Firestore:', identifier);
     const userDoc = doc(db, 'users', userRole.uid);
     await setDoc(userDoc, {
       uid: userRole.uid,
-      email: userRole.email,
+      email: userRole.email || null,
+      phoneNumber: userRole.phoneNumber || null,
       displayName: userRole.displayName,
       role: userRole.role,
+      authMethod: userRole.authMethod,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       lastLogin: new Date().toISOString()
@@ -721,9 +824,11 @@ export const getUserProfile = async (uid: string): Promise<UserRole | null> => {
       console.log('[FIREBASE] User profile found:', data.email);
       return {
         uid: data.uid,
-        email: data.email,
+        email: data.email || undefined,
+        phoneNumber: data.phoneNumber || undefined,
         displayName: data.displayName,
-        role: data.role
+        role: data.role,
+        authMethod: data.authMethod || 'email'
       };
     } else {
       console.log('[FIREBASE] No user profile found');

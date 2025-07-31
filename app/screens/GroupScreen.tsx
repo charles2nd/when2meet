@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useApp } from '../contexts/AppContext';
-import { Colors, Typography, Spacing, BorderRadius, CommonStyles, HeaderStyles } from '../theme';
+import { Colors, Typography, Spacing, BorderRadius, Shadows, CommonStyles, HeaderStyles } from '../theme';
 import { getWebStyle } from '../utils/webStyles';
 import { AuthGuard } from '../components/AuthGuard';
 import { SafeHeader } from '../components/SafeHeader';
@@ -107,17 +107,21 @@ const GroupScreen: React.FC = () => {
   };
 
   const handleJoinGroup = async () => {
-    if (!groupCode.trim()) {
+    const trimmedCode = groupCode.trim();
+    if (!trimmedCode) {
       console.log('[GROUP] ❌ Invalid input:', t.group.enterSquadCode);
+      showToastMessage(`❌ ${t.group.enterSquadCode || 'Enter squad code to deploy!'}`);
       return;
     }
 
     setIsJoining(true);
     try {
-      console.log('[GROUP] Joining group with code:', groupCode.trim());
-      const success = await joinGroup(groupCode.trim());
+      console.log('[GROUP] Joining group with code:', trimmedCode);
+      const success = await joinGroup(trimmedCode);
       if (success) {
         console.log('[GROUP] ✅ Successfully joined group');
+        showToastMessage(`✅ ${t.group.deploymentSuccessful || 'DEPLOYMENT SUCCESSFUL!'}`);
+        
         setShowGroupModal(false);
         setModalMode('list');
         setGroupCode('');
@@ -127,13 +131,67 @@ const GroupScreen: React.FC = () => {
         router.push('/(tabs)/calendar');
       } else {
         console.error('[GROUP] ❌ Failed to join group - invalid code');
+        showToastMessage(`❌ ${t.group.squadNotFound || 'Squad not found. Check your code.'}`);
       }
     } catch (error) {
       console.error('[GROUP] ❌ Error joining group:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to join group';
       console.error('[GROUP] Error message:', errorMessage);
+      showToastMessage(`❌ ${t.group.joinSquadFailed || 'Failed to join squad. Try again.'}`);
     } finally {
       setIsJoining(false);
+    }
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      console.log('[GROUP] Attempting to paste from clipboard...');
+      
+      // Check if clipboard is available
+      const isAvailable = await ClipboardUtil.isAvailable();
+      console.log('[GROUP] Clipboard available for paste:', isAvailable);
+      
+      if (!isAvailable) {
+        console.log('[GROUP] Clipboard not available, prompting manual paste');
+        showToastMessage(`ℹ️ ${t.group.manualPasteHint || 'Please paste the code manually using Ctrl+V (Cmd+V on Mac)'}`);
+        return;
+      }
+      
+      const clipboardText = await ClipboardUtil.getStringAsync();
+      console.log('[GROUP] Clipboard text length:', clipboardText?.length);
+      console.log('[GROUP] Clipboard text preview:', clipboardText?.substring(0, 20) + '...');
+      
+      if (clipboardText && clipboardText.trim().length > 0) {
+        // Clean the text - remove spaces, special characters, keep only alphanumeric
+        const cleanCode = clipboardText.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        console.log('[GROUP] Cleaned code:', cleanCode);
+        
+        if (cleanCode.length > 0) {
+          const finalCode = cleanCode.substring(0, 10); // Respect maxLength
+          setGroupCode(finalCode);
+          showToastMessage(`📋 ${t.group.codePasted || 'Code pasted from clipboard'}: ${finalCode}`);
+          console.log('[GROUP] ✅ Code pasted successfully:', finalCode);
+        } else {
+          showToastMessage(`⚠️ ${t.group.invalidClipboard || 'Clipboard contains no valid code'}`);
+          console.log('[GROUP] ⚠️ Invalid clipboard content after cleaning');
+        }
+      } else {
+        showToastMessage(`⚠️ ${t.group.emptyClipboard || 'Clipboard is empty'}`);
+        console.log('[GROUP] ⚠️ Empty or null clipboard');
+      }
+    } catch (error) {
+      console.error('[GROUP] Error pasting from clipboard:', error);
+      
+      // More specific error messages based on platform and error type
+      if (Platform.OS === 'web') {
+        if (error.name === 'NotAllowedError' || error.message.includes('permission')) {
+          showToastMessage(`🔒 Clipboard access denied. ${t.group.manualPasteHint || 'Please paste manually using Ctrl+V'}`);
+        } else {
+          showToastMessage(`ℹ️ ${t.group.manualPasteHint || 'Please paste the code manually using Ctrl+V'}`);
+        }
+      } else {
+        showToastMessage(`❌ ${t.group.pasteError || 'Could not paste from clipboard'}`);
+      }
     }
   };
 
@@ -177,20 +235,40 @@ const GroupScreen: React.FC = () => {
     if (!currentGroup) return;
 
     try {
+      console.log('[GROUP] Attempting to copy group code:', currentGroup.code);
+      
+      // Test clipboard availability first
+      const isAvailable = await ClipboardUtil.isAvailable();
+      console.log('[GROUP] Clipboard available:', isAvailable);
+      
       const success = await ClipboardUtil.setStringAsync(currentGroup.code);
       
-      if (!success) {
-        // Fallback: show error message
-        showToastMessage(`❌ ${t.group.manualCopyMessage || 'Please copy this code manually'}: ${currentGroup.code}`);
-        return;
+      if (success) {
+        // Verify the copy worked by reading it back
+        setTimeout(async () => {
+          try {
+            const readBack = await ClipboardUtil.getStringAsync();
+            if (readBack === currentGroup.code) {
+              showToastMessage(`✅ ${t.group.copiedToClipboard || 'Copied to clipboard'}: ${currentGroup.code}`);
+              console.log('[GROUP] ✅ Group code copied and verified:', currentGroup.code);
+            } else {
+              showToastMessage(`⚠️ ${t.group.manualCopyMessage || 'Please copy this code manually'}: ${currentGroup.code}`);
+              console.log('[GROUP] ⚠️ Copy verification failed. Expected:', currentGroup.code, 'Got:', readBack);
+            }
+          } catch (verifyError) {
+            // Still show success if we can't verify
+            showToastMessage(`✅ ${t.group.copiedToClipboard || 'Copied to clipboard'}: ${currentGroup.code}`);
+            console.log('[GROUP] ✅ Copy successful (verification failed):', verifyError);
+          }
+        }, 100);
+      } else {
+        // Clipboard API failed, show manual copy message
+        showToastMessage(`📋 ${t.group.manualCopyMessage || 'Please copy this code manually'}: ${currentGroup.code}`);
+        console.log('[GROUP] ⚠️ Clipboard API failed, showing manual copy message');
       }
-      
-      // Show success toast with the code
-      showToastMessage(`✅ ${t.group.copiedToClipboard || 'Copied to clipboard'}: ${currentGroup.code}`);
-      console.log('[GROUP] ✅ Group code copied to clipboard:', currentGroup.code);
     } catch (error) {
       console.error('[GROUP] ❌ Failed to copy code to clipboard:', error);
-      showToastMessage(`❌ ${t.group.copyErrorMessage || 'Failed to copy code to clipboard'}`);
+      showToastMessage(`📋 ${t.group.manualCopyMessage || 'Please copy this code manually'}: ${currentGroup.code}`);
     }
   };
 
@@ -215,37 +293,49 @@ const GroupScreen: React.FC = () => {
     return (
       <Modal
         visible={showGroupModal}
-        animationType="slide"
-        presentationStyle="fullScreen"
+        animationType="fade"
+        transparent={true}
         onRequestClose={() => setShowGroupModal(false)}
       >
         <KeyboardAvoidingView 
-          style={styles.modalContainer}
+          style={styles.modalOverlay}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <StatusBar barStyle="light-content" backgroundColor={Colors.tactical.dark} />
+          <StatusBar barStyle="light-content" backgroundColor="rgba(0,0,0,0.8)" translucent />
           
-          {/* Header with gradient */}
-          <LinearGradient
-            colors={[Colors.primary, Colors.primaryDark]}
-            style={styles.modalHeader}
-          >
-            <View style={styles.modalHeaderContent}>
-              <TouchableOpacity 
-                onPress={() => setShowGroupModal(false)}
-                style={styles.closeButton}
-              >
-                <Ionicons name="close" size={24} color={Colors.text.primary} />
-              </TouchableOpacity>
-              
-              <Text style={styles.modalTitle}>
-                {modalMode === 'list' ? 'MES GROUPES' : 
-                 modalMode === 'join' ? 'REJOINDRE GROUPE' : 'CRÉER GROUPE'}
-              </Text>
-              
-              <View style={styles.headerSpacer} />
-            </View>
-          </LinearGradient>
+          {/* Background Blur */}
+          <TouchableOpacity 
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowGroupModal(false)}
+          />
+          
+          {/* Modern Modal Container */}
+          <View style={styles.modalContainer}>
+            {/* Elegant Header */}
+            <LinearGradient
+              colors={['rgba(255, 107, 53, 0.95)', 'rgba(230, 74, 25, 0.95)']}
+              style={styles.modalHeader}
+            >
+              <View style={styles.modalHeaderContent}>
+                <TouchableOpacity 
+                  onPress={() => setShowGroupModal(false)}
+                  style={styles.modernCloseButton}
+                >
+                  <Ionicons name="close" size={20} color={Colors.text.primary} />
+                </TouchableOpacity>
+                
+                <View style={styles.modalTitleContainer}>
+                  <Text style={styles.modalTitle}>
+                    {modalMode === 'list' ? t.group.myGroupsTitle : 
+                     modalMode === 'join' ? t.group.joinGroupTitle : t.group.createGroupTitle}
+                  </Text>
+                  <View style={styles.titleUnderline} />
+                </View>
+                
+                <View style={styles.headerSpacer} />
+              </View>
+            </LinearGradient>
 
           {modalMode === 'list' && (
             <View style={styles.modalContent}>
@@ -284,35 +374,37 @@ const GroupScreen: React.FC = () => {
                   </View>
                 )}
 
-                {/* Action Buttons */}
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={[CommonStyles.buttonBase, getWebStyle('touchableOpacity')]}
-                    onPress={() => setModalMode('join')}
-                  >
-                    <LinearGradient
-                      colors={[Colors.secondary, Colors.secondaryDark]}
-                      style={CommonStyles.buttonGradient}
-                    >
-                      <Ionicons name="enter-outline" size={20} color={Colors.text.primary} />
-                      <Text style={CommonStyles.buttonText}>REJOINDRE UN GROUPE</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[CommonStyles.buttonBase, getWebStyle('touchableOpacity')]}
-                    onPress={() => setModalMode('create')}
-                  >
-                    <LinearGradient
-                      colors={[Colors.primary, Colors.primaryDark]}
-                      style={CommonStyles.buttonGradient}
-                    >
-                      <Ionicons name="add-circle-outline" size={20} color={Colors.text.primary} />
-                      <Text style={CommonStyles.buttonText}>CRÉER UN GROUPE</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
+                {/* Action Buttons - Positioned outside ScrollView for visibility */}
               </ScrollView>
+              
+              {/* Fixed Action Buttons Container */}
+              <View style={styles.fixedActionButtons}>
+                <TouchableOpacity
+                  style={[CommonStyles.buttonBase, getWebStyle('touchableOpacity'), styles.modalActionButton]}
+                  onPress={() => setModalMode('join')}
+                >
+                  <LinearGradient
+                    colors={[Colors.secondary, Colors.secondaryDark]}
+                    style={CommonStyles.buttonGradient}
+                  >
+                    <Ionicons name="enter-outline" size={20} color={Colors.text.primary} />
+                    <Text style={CommonStyles.buttonText}>{t.group.joinGroupButton}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[CommonStyles.buttonBase, getWebStyle('touchableOpacity'), styles.modalActionButton]}
+                  onPress={() => setModalMode('create')}
+                >
+                  <LinearGradient
+                    colors={[Colors.primary, Colors.primaryDark]}
+                    style={CommonStyles.buttonGradient}
+                  >
+                    <Ionicons name="add-circle-outline" size={20} color={Colors.text.primary} />
+                    <Text style={CommonStyles.buttonText}>{t.group.createGroupButton}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
 
@@ -320,69 +412,82 @@ const GroupScreen: React.FC = () => {
             <View style={styles.modalContent}>
               <ScrollView 
                 style={styles.formScrollView}
-                contentContainerStyle={styles.formContainer}
+                contentContainerStyle={styles.modernFormContainer}
                 showsVerticalScrollIndicator={false}
               >
-                {/* Form Content */}
-                <View style={styles.formSection}>
-                  <View style={styles.iconContainer}>
-                    <Ionicons name="shield-checkmark" size={48} color={Colors.accent} />
+                {/* Enhanced Form Content */}
+                <View style={styles.modernFormSection}>
+                  <View style={styles.modernIconContainer}>
+                    <LinearGradient
+                      colors={[Colors.accent, '#FFA000']}
+                      style={styles.iconGradient}
+                    >
+                      <Ionicons name="shield-checkmark" size={40} color={Colors.text.inverse} />
+                    </LinearGradient>
                   </View>
                   
-                  <Text style={styles.formTitle}>REJOINDRE UN GROUPE</Text>
-                  <Text style={styles.formSubtitle}>
-                    Entrez le code du groupe fourni par l'administrateur
+                  <Text style={styles.modernFormTitle}>{t.group.joinGroupFormTitle}</Text>
+                  <Text style={styles.modernFormSubtitle}>
+                    {t.group.enterGroupCodeInstruction}
                   </Text>
                   
-                  <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>CODE DU GROUPE</Text>
-                    <TextInput
-                      style={[styles.modalInput, styles.codeInput, getWebStyle('textInput')]}
-                      placeholder="Ex: ABC123"
-                      placeholderTextColor={Colors.text.tertiary}
-                      value={groupCode}
-                      onChangeText={setGroupCode}
-                      autoCapitalize="characters"
-                      returnKeyType="join"
-                      maxLength={10}
-                      autoFocus={true}
-                    />
-                    <Text style={styles.inputHint}>
-                      Le code est généralement composé de 6 caractères
+                  <View style={styles.modernInputContainer}>
+                    <Text style={styles.modernInputLabel}>CODE DU GROUPE</Text>
+                    <View style={styles.inputWrapper}>
+                      <TextInput
+                        style={[styles.modernInput, styles.codeInput, getWebStyle('textInput')]}
+                        placeholder="Ex: ABC123"
+                        placeholderTextColor={Colors.text.tertiary}
+                        value={groupCode}
+                        onChangeText={setGroupCode}
+                        autoCapitalize="characters"
+                        returnKeyType="join"
+                        maxLength={10}
+                        autoFocus={true}
+                      />
+                      <View style={styles.inputIcon}>
+                        <Ionicons name="key" size={20} color={Colors.accent} />
+                      </View>
+                    </View>
+                    <Text style={styles.modernInputHint}>
+                      Group code is usually 6 characters long.
                     </Text>
                   </View>
                 </View>
               </ScrollView>
               
-              {/* Bottom Buttons */}
-              <View style={styles.bottomButtonContainer}>
+              {/* Modern Bottom Buttons */}
+              <View style={styles.modernBottomContainer}>
                 <TouchableOpacity 
-                  style={[styles.secondaryButton, getWebStyle('touchableOpacity')]}
+                  style={[styles.modernSecondaryButton, getWebStyle('touchableOpacity')]}
                   onPress={() => setModalMode('list')}
                 >
-                  <Text style={styles.secondaryButtonText}>RETOUR</Text>
+                  <View style={styles.modernSecondaryButtonContent}>
+                    <Ionicons name="arrow-back" size={18} color={Colors.text.secondary} />
+                    <Text style={styles.modernSecondaryButtonText}>{t.group.goBackButton}</Text>
+                  </View>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
                   style={[
-                    styles.primaryButton, 
+                    styles.modernPrimaryButton, 
                     getWebStyle('touchableOpacity'),
-                    (!groupCode.trim() || isJoining) && styles.disabledButton
+                    (!groupCode.trim() || isJoining) && styles.modernDisabledButton
                   ]}
                   onPress={handleJoinGroup}
                   disabled={!groupCode.trim() || isJoining}
                 >
                   <LinearGradient
-                    colors={[Colors.secondary, Colors.secondaryDark]}
-                    style={styles.primaryButtonGradient}
+                    colors={isJoining ? [Colors.text.tertiary, Colors.text.secondary] : [Colors.secondary, Colors.secondaryDark]}
+                    style={styles.modernPrimaryButtonGradient}
                   >
                     {isJoining ? (
                       <ActivityIndicator size="small" color={Colors.text.primary} />
                     ) : (
-                      <Ionicons name="rocket-outline" size={20} color={Colors.text.primary} />
+                      <Ionicons name="rocket" size={18} color={Colors.text.primary} />
                     )}
-                    <Text style={styles.primaryButtonText}>
-                      {isJoining ? 'CONNEXION...' : 'REJOINDRE LE GROUPE'}
+                    <Text style={styles.modernPrimaryButtonText}>
+                      {isJoining ? t.group.connecting : t.group.joinGroupShort}
                     </Text>
                   </LinearGradient>
                 </TouchableOpacity>
@@ -394,73 +499,89 @@ const GroupScreen: React.FC = () => {
             <View style={styles.modalContent}>
               <ScrollView 
                 style={styles.formScrollView}
-                contentContainerStyle={styles.formContainer}
+                contentContainerStyle={styles.modernFormContainer}
                 showsVerticalScrollIndicator={false}
               >
-                {/* Form Content */}
-                <View style={styles.formSection}>
-                  <View style={styles.iconContainer}>
-                    <Ionicons name="flag" size={48} color={Colors.accent} />
+                {/* Enhanced Form Content */}
+                <View style={styles.modernFormSection}>
+                  <View style={styles.modernIconContainer}>
+                    <LinearGradient
+                      colors={[Colors.primary, Colors.primaryDark]}
+                      style={styles.iconGradient}
+                    >
+                      <Ionicons name="flag" size={40} color={Colors.text.primary} />
+                    </LinearGradient>
                   </View>
                   
-                  <Text style={styles.formTitle}>CRÉER UN NOUVEAU GROUPE</Text>
-                  <Text style={styles.formSubtitle}>
-                    Choisissez un nom pour votre groupe tactique
+                  <Text style={styles.modernFormTitle}>{t.group.createGroupFormTitle}</Text>
+                  <Text style={styles.modernFormSubtitle}>
+                    {t.group.chooseGroupNameInstruction}
                   </Text>
                   
-                  <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>NOM DU GROUPE</Text>
-                    <TextInput
-                      style={[styles.modalInput, getWebStyle('textInput')]}
-                      placeholder="Ex: Équipe Alpha, Squad Delta..."
-                      placeholderTextColor={Colors.text.tertiary}
-                      value={groupName}
-                      onChangeText={setGroupName}
-                      maxLength={30}
-                      autoFocus={true}
-                    />
-                    <Text style={styles.inputHint}>
-                      {groupName.length}/30 caractères
-                    </Text>
+                  <View style={styles.modernInputContainer}>
+                    <Text style={styles.modernInputLabel}>NOM DU GROUPE</Text>
+                    <View style={styles.inputWrapper}>
+                      <TextInput
+                        style={[styles.modernInput, getWebStyle('textInput')]}
+                        placeholder={t.group.squadNamePlaceholder}
+                        placeholderTextColor={Colors.text.tertiary}
+                        value={groupName}
+                        onChangeText={setGroupName}
+                        maxLength={30}
+                        autoFocus={true}
+                      />
+                      <View style={styles.inputIcon}>
+                        <Ionicons name="people" size={20} color={Colors.accent} />
+                      </View>
+                    </View>
+                    <View style={styles.characterCounter}>
+                      <Text style={[styles.modernInputHint, { color: groupName.length > 25 ? Colors.warning : Colors.text.tertiary }]}>
+                        {groupName.length}/30 caractères
+                      </Text>
+                    </View>
                   </View>
                 </View>
               </ScrollView>
               
-              {/* Bottom Buttons */}
-              <View style={styles.bottomButtonContainer}>
+              {/* Modern Bottom Buttons */}
+              <View style={styles.modernBottomContainer}>
                 <TouchableOpacity 
-                  style={[styles.secondaryButton, getWebStyle('touchableOpacity')]}
+                  style={[styles.modernSecondaryButton, getWebStyle('touchableOpacity')]}
                   onPress={() => setModalMode('list')}
                 >
-                  <Text style={styles.secondaryButtonText}>RETOUR</Text>
+                  <View style={styles.modernSecondaryButtonContent}>
+                    <Ionicons name="arrow-back" size={18} color={Colors.text.secondary} />
+                    <Text style={styles.modernSecondaryButtonText}>{t.group.goBackButton}</Text>
+                  </View>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
                   style={[
-                    styles.primaryButton, 
+                    styles.modernPrimaryButton, 
                     getWebStyle('touchableOpacity'),
-                    (!groupName.trim() || isCreating) && styles.disabledButton
+                    (!groupName.trim() || isCreating) && styles.modernDisabledButton
                   ]}
                   onPress={handleCreateGroup}
                   disabled={!groupName.trim() || isCreating}
                 >
                   <LinearGradient
-                    colors={[Colors.primary, Colors.primaryDark]}
-                    style={styles.primaryButtonGradient}
+                    colors={isCreating ? [Colors.text.tertiary, Colors.text.secondary] : [Colors.primary, Colors.primaryDark]}
+                    style={styles.modernPrimaryButtonGradient}
                   >
                     {isCreating ? (
                       <ActivityIndicator size="small" color={Colors.text.primary} />
                     ) : (
-                      <Ionicons name="add-circle" size={20} color={Colors.text.primary} />
+                      <Ionicons name="add-circle" size={18} color={Colors.text.primary} />
                     )}
-                    <Text style={styles.primaryButtonText}>
-                      {isCreating ? 'CRÉATION...' : 'CRÉER LE GROUPE'}
+                    <Text style={styles.modernPrimaryButtonText}>
+                      {isCreating ? t.group.creating : t.group.createGroup}
                     </Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
             </View>
           )}
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     );
@@ -590,7 +711,7 @@ const GroupScreen: React.FC = () => {
   });
 
   // Compact header with group name only
-  const compactTitle = currentGroup ? currentGroup.name : 'GROUPES';
+  const compactTitle = currentGroup ? currentGroup.name : t.group.groupsTitle;
   
   return (
     <AuthGuard>
@@ -889,170 +1010,236 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.6,
   },
-  // Modal styles
-  modalContainer: {
+  // Modern Modal styles
+  modalOverlay: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+  },
+  modalContainer: {
+    width: '90%',
+    maxWidth: 420,
+    minHeight: 500,
+    maxHeight: '85%',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+    overflow: 'hidden',
+    ...Shadows.lg,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.4,
+    elevation: 15,
   },
   modalHeader: {
-    paddingBottom: Spacing.lg,
-    paddingTop: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   modalHeaderContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
   },
-  closeButton: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  modernCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  headerSpacer: {
-    width: 44,
+  modalTitleContainer: {
+    alignItems: 'center',
+    flex: 1,
   },
   modalTitle: {
-    fontSize: Typography.sizes.xl,
+    fontSize: Typography.sizes.lg,
     fontWeight: Typography.weights.bold,
     color: Colors.text.primary,
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     textAlign: 'center',
+    marginBottom: Spacing.xs,
+  },
+  titleUnderline: {
+    width: 40,
+    height: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderRadius: 1,
+  },
+  headerSpacer: {
+    width: 36,
   },
   modalContent: {
     flex: 1,
   },
-  // Form styles
+  // Modern Form styles
   formScrollView: {
     flex: 1,
   },
-  formContainer: {
+  modernFormContainer: {
     flexGrow: 1,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.xxl,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.lg,
   },
-  formSection: {
+  modernFormSection: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
   },
-  iconContainer: {
-    width: 100,
-    height: 100,
+  modernIconContainer: {
+    marginBottom: Spacing.lg,
+  },
+  iconGradient: {
+    width: 80,
+    height: 80,
     borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(255, 107, 53, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: Spacing.xl,
-    borderWidth: 2,
-    borderColor: Colors.accent,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  formTitle: {
-    fontSize: Typography.sizes.xxl,
+  modernFormTitle: {
+    fontSize: Typography.sizes.xl,
     fontWeight: Typography.weights.bold,
     color: Colors.text.primary,
     textAlign: 'center',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
     letterSpacing: 0.5,
   },
-  formSubtitle: {
+  modernFormSubtitle: {
     fontSize: Typography.sizes.md,
     color: Colors.text.secondary,
     textAlign: 'center',
     marginBottom: Spacing.xl,
-    lineHeight: 24,
-    paddingHorizontal: Spacing.xl,
+    lineHeight: 22,
+    paddingHorizontal: Spacing.md,
   },
-  inputContainer: {
+  modernInputContainer: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 360,
   },
-  inputLabel: {
+  modernInputLabel: {
     fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.bold,
+    fontWeight: Typography.weights.semibold,
     color: Colors.accent,
     marginBottom: Spacing.sm,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
-  modalInput: {
+  inputWrapper: {
+    position: 'relative',
+    marginBottom: Spacing.sm,
+  },
+  modernInput: {
     backgroundColor: Colors.tactical.medium,
-    borderRadius: BorderRadius.lg,
+    borderRadius: BorderRadius.md,
     paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
-    fontSize: Typography.sizes.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingRight: 50,
+    fontSize: Typography.sizes.md,
     color: Colors.text.primary,
     borderWidth: 2,
     borderColor: Colors.border.medium,
-    marginBottom: Spacing.sm,
+    fontWeight: Typography.weights.medium,
+  },
+  inputIcon: {
+    position: 'absolute',
+    right: Spacing.md,
+    top: '50%',
+    transform: [{ translateY: -10 }],
   },
   codeInput: {
     textAlign: 'center',
-    fontSize: Typography.sizes.xl,
+    fontSize: Typography.sizes.lg,
     fontWeight: Typography.weights.bold,
-    letterSpacing: 2,
+    letterSpacing: 3,
     textTransform: 'uppercase',
+    paddingRight: Spacing.lg,
   },
-  inputHint: {
-    fontSize: Typography.sizes.sm,
+  modernInputHint: {
+    fontSize: Typography.sizes.xs,
     color: Colors.text.tertiary,
     textAlign: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.sm,
+    lineHeight: 16,
   },
-  // Bottom buttons
-  bottomButtonContainer: {
+  characterCounter: {
+    alignItems: 'flex-end',
+  },
+  // Modern Bottom buttons
+  modernBottomContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.xl,
-    paddingTop: Spacing.lg,
-    backgroundColor: Colors.background.primary,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border.medium,
-    gap: Spacing.md,
-  },
-  secondaryButton: {
+    paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
-    borderRadius: BorderRadius.lg,
     backgroundColor: Colors.tactical.medium,
-    borderWidth: 1,
-    borderColor: Colors.border.medium,
-    minWidth: 120,
-  },
-  secondaryButtonText: {
-    fontSize: Typography.sizes.md,
-    fontWeight: Typography.weights.bold,
-    color: Colors.text.secondary,
-    textAlign: 'center',
-    letterSpacing: 0.5,
-  },
-  primaryButton: {
-    borderRadius: BorderRadius.lg,
-    minWidth: 200,
-    maxWidth: 280,
-    flex: 1,
-  },
-  primaryButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
-    borderRadius: BorderRadius.lg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border.light,
     gap: Spacing.sm,
   },
-  primaryButtonText: {
-    fontSize: Typography.sizes.md,
+  modernSecondaryButton: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: Colors.border.light,
+    minWidth: 100,
+  },
+  modernSecondaryButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+  },
+  modernSecondaryButtonText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.text.secondary,
+    letterSpacing: 0.3,
+  },
+  modernPrimaryButton: {
+    borderRadius: BorderRadius.md,
+    flex: 1,
+    maxWidth: 220,
+    ...Shadows.md,
+  },
+  modernPrimaryButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.xs,
+  },
+  modernPrimaryButtonText: {
+    fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.bold,
     color: Colors.text.primary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+  },
+  modernDisabledButton: {
+    opacity: 0.5,
   },
   groupSection: {
     marginBottom: Spacing.xl,
@@ -1106,12 +1293,46 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     fontWeight: Typography.weights.medium,
   },
-  actionButtons: {
+  modernActionButtons: {
     gap: Spacing.md,
     marginTop: Spacing.lg,
-    marginHorizontal: Spacing.xl,
+    marginHorizontal: Spacing.lg,
+  },
+  modernActionButton: {
+    borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
+    ...Shadows.md,
+    marginBottom: Spacing.sm,
+  },
+  modernActionButtonGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.md,
+  },
+  actionButtonIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionButtonContent: {
+    flex: 1,
+  },
+  modernActionButtonTitle: {
+    fontSize: Typography.sizes.md,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.primary,
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  modernActionButtonSubtitle: {
+    fontSize: Typography.sizes.sm,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: Typography.weights.medium,
   },
   // Header with button styles
   headerWithButton: {
@@ -1214,6 +1435,36 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     fontWeight: Typography.weights.medium,
     textAlign: 'center',
+  },
+  // Action buttons for creating/joining groups
+  actionButtons: {
+    marginTop: Spacing.lg,
+    gap: Spacing.md,
+  },
+  // Fixed action buttons for modal visibility
+  fixedActionButtons: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+    backgroundColor: Colors.tactical.medium,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border.light,
+    gap: Spacing.md,
+  },
+  modalActionButton: {
+    marginBottom: Spacing.xs,
+  },
+  // Clipboard paste functionality styles
+  inputActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  pasteButton: {
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    backgroundColor: 'rgba(255, 107, 53, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 53, 0.3)',
   },
 });
 

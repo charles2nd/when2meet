@@ -9,6 +9,7 @@ import 'react-native-reanimated';
 
 import { AppProvider } from '../contexts/AppContext';
 import { AuthProvider } from '../contexts/AuthContext';
+import { ToastProvider } from '../components/Toast';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -95,20 +96,22 @@ function RootLayoutNav() {
   };
 
   return (
-    <AuthProvider>
-      <AppProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="login" />
-            <Stack.Screen name="dateDetail" />
-            <Stack.Screen name="groupSettings" />
-            <Stack.Screen name="setAvailability" />
-            <Stack.Screen name="+not-found" options={{ title: 'Oops!' }} />
-          </Stack>
-        </ThemeProvider>
-      </AppProvider>
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <AppProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="login" />
+              <Stack.Screen name="dateDetail" />
+              <Stack.Screen name="groupSettings" />
+              <Stack.Screen name="setAvailability" />
+              <Stack.Screen name="+not-found" options={{ title: 'Oops!' }} />
+            </Stack>
+          </ThemeProvider>
+        </AppProvider>
+      </AuthProvider>
+    </ToastProvider>
   );
 }
 

@@ -1,3 +1,3 @@
-import PasswordlessLoginScreen from '../screens/PasswordlessLoginScreen';
+import ModernLoginScreen from '../screens/ModernLoginScreen';
 
-export default PasswordlessLoginScreen;
+export default ModernLoginScreen;

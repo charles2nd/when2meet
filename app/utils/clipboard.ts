@@ -1,11 +1,28 @@
 import { Platform, Share } from 'react-native';
 
-// Try to import expo-clipboard if available
-let Clipboard: any = null;
+// Try to import both expo-clipboard and react-native Clipboard
+let ExpoClipboard: any = null;
+let RNClipboard: any = null;
+
 try {
-  Clipboard = require('expo-clipboard');
+  ExpoClipboard = require('expo-clipboard');
+  console.log('[CLIPBOARD] ✅ expo-clipboard loaded');
 } catch (error) {
-  console.log('[CLIPBOARD] expo-clipboard not available, will use fallbacks');
+  console.log('[CLIPBOARD] expo-clipboard not available');
+}
+
+try {
+  RNClipboard = require('@react-native-clipboard/clipboard');
+  console.log('[CLIPBOARD] ✅ @react-native-clipboard/clipboard loaded');
+} catch (error) {
+  try {
+    // Fallback to built-in Clipboard from react-native
+    const { Clipboard } = require('react-native');
+    RNClipboard = Clipboard;
+    console.log('[CLIPBOARD] ✅ react-native Clipboard loaded');
+  } catch (error2) {
+    console.log('[CLIPBOARD] No react-native Clipboard available');
+  }
 }
 
 // Cross-platform clipboard utility that works with Expo Go and native builds
@@ -17,8 +34,14 @@ export class ClipboardUtil {
   private static initialize() {
     if (!this.initialized) {
       // Check clipboard availability on first use
-      if (Clipboard && typeof Clipboard.setStringAsync === 'function') {
+      if (ExpoClipboard && typeof ExpoClipboard.setStringAsync === 'function') {
         this.clipboardAvailable = true;
+        console.log('[CLIPBOARD] Using expo-clipboard');
+      } else if (RNClipboard && typeof RNClipboard.setString === 'function') {
+        this.clipboardAvailable = true;
+        console.log('[CLIPBOARD] Using react-native Clipboard');
+      } else {
+        console.log('[CLIPBOARD] No clipboard API available, using fallbacks');
       }
       this.initialized = true;
     }
@@ -26,96 +49,144 @@ export class ClipboardUtil {
 
   private static getClipboardModule() {
     this.initialize();
-    if (this.clipboardAvailable && Clipboard) {
-      return Clipboard;
+    if (ExpoClipboard && typeof ExpoClipboard.setStringAsync === 'function') {
+      return ExpoClipboard;
+    } else if (RNClipboard) {
+      return RNClipboard;
     }
     return null;
   }
 
   /**
-   * Copy text to clipboard with fallback for Expo Go
+   * Copy text to clipboard with multiple fallback strategies
    */
   static async setStringAsync(text: string): Promise<boolean> {
+    console.log('[CLIPBOARD] Attempting to copy text:', text.substring(0, 20) + '...');
+    
     try {
       const clipboardModule = this.getClipboardModule();
       
       if (clipboardModule) {
-        // Native clipboard available
-        await clipboardModule.setStringAsync(text);
-        console.log('[CLIPBOARD] ✅ Text copied to native clipboard');
-        return true;
-      } else {
-        // Store the text internally as a fallback
-        this.lastCopiedText = text;
-        
-        // Fallback for different platforms
-        if (Platform.OS === 'web') {
-          // Web clipboard API
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(text);
-            console.log('[CLIPBOARD] ✅ Text copied to web clipboard');
-            return true;
-          } else {
-            // Fallback for older browsers
-            const textArea = document.createElement('textarea');
-            textArea.value = text;
-            textArea.style.position = 'fixed';
-            textArea.style.left = '-999999px';
-            textArea.style.top = '-999999px';
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            const result = document.execCommand('copy');
-            document.body.removeChild(textArea);
-            
-            if (result) {
-              console.log('[CLIPBOARD] ✅ Text copied to web clipboard (fallback)');
-              return true;
-            }
-          }
-        } else if (Platform.OS === 'ios' || Platform.OS === 'android') {
-          // Mobile fallback - use Share API with instructions
-          console.log('[CLIPBOARD] Using mobile fallback - stored text internally');
-          // Return true since we've stored the text and can show it in the UI
+        // Try expo-clipboard first (async)
+        if (ExpoClipboard && typeof ExpoClipboard.setStringAsync === 'function') {
+          await ExpoClipboard.setStringAsync(text);
+          console.log('[CLIPBOARD] ✅ Text copied via expo-clipboard');
+          this.lastCopiedText = text; // Store for verification
           return true;
         }
         
-        console.warn('[CLIPBOARD] ⚠️ Clipboard not available, text stored internally:', text);
-        return true; // Return true since we stored it internally
+        // Try react-native Clipboard (sync)
+        if (RNClipboard && typeof RNClipboard.setString === 'function') {
+          RNClipboard.setString(text);
+          console.log('[CLIPBOARD] ✅ Text copied via react-native Clipboard');
+          this.lastCopiedText = text; // Store for verification
+          return true;
+        }
       }
+      
+      // Platform-specific fallbacks
+      if (Platform.OS === 'web') {
+        // Modern web clipboard API
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          console.log('[CLIPBOARD] ✅ Text copied via web clipboard API');
+          this.lastCopiedText = text;
+          return true;
+        }
+        
+        // Legacy web clipboard fallback
+        try {
+          const textArea = document.createElement('textarea');
+          textArea.value = text;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          textArea.style.top = '-999999px';
+          textArea.style.opacity = '0';
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          
+          const result = document.execCommand('copy');
+          document.body.removeChild(textArea);
+          
+          if (result) {
+            console.log('[CLIPBOARD] ✅ Text copied via legacy web API');
+            this.lastCopiedText = text;
+            return true;
+          }
+        } catch (legacyError) {
+          console.log('[CLIPBOARD] Legacy web copy failed:', legacyError);
+        }
+      }
+      
+      // Store text internally as final fallback
+      this.lastCopiedText = text;
+      console.warn('[CLIPBOARD] ⚠️ No clipboard API available, text stored internally');
+      return false; // Return false to indicate clipboard didn't work
+      
     } catch (error) {
       console.error('[CLIPBOARD] ❌ Failed to copy to clipboard:', error);
       // Store text as last resort
       this.lastCopiedText = text;
-      return true; // Return true to show success message
+      return false; // Return false to indicate failure
     }
   }
 
   /**
-   * Get text from clipboard with fallback
+   * Get text from clipboard with multiple fallback strategies
    */
   static async getStringAsync(): Promise<string | null> {
+    console.log('[CLIPBOARD] Attempting to read from clipboard...');
+    
     try {
       const clipboardModule = this.getClipboardModule();
       
       if (clipboardModule) {
-        // Native clipboard available
-        const text = await clipboardModule.getStringAsync();
-        console.log('[CLIPBOARD] ✅ Text read from native clipboard');
-        return text;
-      } else {
-        // Fallback for Expo Go/web
-        if (Platform.OS === 'web') {
-          if (navigator.clipboard && navigator.clipboard.readText) {
-            const text = await navigator.clipboard.readText();
-            console.log('[CLIPBOARD] ✅ Text read from web clipboard');
-            return text;
-          }
+        // Try expo-clipboard first (async)
+        if (ExpoClipboard && typeof ExpoClipboard.getStringAsync === 'function') {
+          const text = await ExpoClipboard.getStringAsync();
+          console.log('[CLIPBOARD] ✅ Text read via expo-clipboard:', text?.substring(0, 20) + '...');
+          return text;
         }
         
-        console.warn('[CLIPBOARD] ⚠️ Clipboard read not available');
-        return null;
+        // Try react-native Clipboard (async)
+        if (RNClipboard && typeof RNClipboard.getString === 'function') {
+          const text = await RNClipboard.getString();
+          console.log('[CLIPBOARD] ✅ Text read via react-native Clipboard:', text?.substring(0, 20) + '...');
+          return text;
+        }
       }
+      
+      // Platform-specific fallbacks
+      if (Platform.OS === 'web') {
+        // Modern web clipboard API
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          try {
+            const text = await navigator.clipboard.readText();
+            console.log('[CLIPBOARD] ✅ Text read via web clipboard API:', text?.substring(0, 20) + '...');
+            return text;
+          } catch (webError) {
+            console.log('[CLIPBOARD] Web clipboard read permission denied or failed:', webError);
+            // Try to request permission
+            if (navigator.permissions) {
+              try {
+                const permission = await navigator.permissions.query({ name: 'clipboard-read' as PermissionName });
+                if (permission.state === 'granted') {
+                  const text = await navigator.clipboard.readText();
+                  console.log('[CLIPBOARD] ✅ Text read after permission grant');
+                  return text;
+                }
+              } catch (permissionError) {
+                console.log('[CLIPBOARD] Permission check failed:', permissionError);
+              }
+            }
+          }
+        }
+      }
+      
+      console.warn('[CLIPBOARD] ⚠️ Clipboard read not available or permission denied');
+      return null;
+      
     } catch (error) {
       console.error('[CLIPBOARD] ❌ Failed to read from clipboard:', error);
       return null;
@@ -129,17 +200,46 @@ export class ClipboardUtil {
     try {
       const clipboardModule = this.getClipboardModule();
       if (clipboardModule) {
+        console.log('[CLIPBOARD] Native clipboard available');
         return true;
       }
       
       if (Platform.OS === 'web') {
-        return !!(navigator.clipboard && navigator.clipboard.writeText);
+        const webAvailable = !!(navigator.clipboard && navigator.clipboard.writeText);
+        console.log('[CLIPBOARD] Web clipboard available:', webAvailable);
+        return webAvailable;
       }
       
+      console.log('[CLIPBOARD] No clipboard available');
       return false;
     } catch (error) {
+      console.log('[CLIPBOARD] Error checking availability:', error);
       return false;
     }
+  }
+
+  /**
+   * Test clipboard functionality by copying and reading back
+   */
+  static async testClipboard(): Promise<{ copy: boolean; paste: boolean }> {
+    const testText = 'TEST123';
+    
+    // Test copy
+    const copyResult = await this.setStringAsync(testText);
+    
+    // Wait a moment for clipboard to update
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Test paste
+    const pasteResult = await this.getStringAsync();
+    const pasteSuccess = pasteResult === testText;
+    
+    console.log('[CLIPBOARD] Test results - Copy:', copyResult, 'Paste:', pasteSuccess);
+    
+    return {
+      copy: copyResult,
+      paste: pasteSuccess
+    };
   }
 
   /**

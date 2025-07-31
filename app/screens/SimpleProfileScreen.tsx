@@ -132,8 +132,12 @@ const SimpleProfileScreen: React.FC = () => {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.label}>{t.profile.email}</Text>
-        <Text style={styles.value}>{authUser.email}</Text>
+        <Text style={styles.label}>
+          {authUser.phoneNumber ? t.phone.phoneNumber : t.profile.email}
+        </Text>
+        <Text style={styles.value}>
+          {authUser.phoneNumber || authUser.email || 'Not provided'}
+        </Text>
       </View>
 
       <View style={styles.section}>

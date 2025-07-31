@@ -142,7 +142,7 @@ export class FirebaseGroupService {
         memberDetails: [{
           id: groupData.adminUser.id,
           name: groupData.adminUser.name,
-          email: groupData.adminUser.email,
+          ...(groupData.adminUser.email && { email: groupData.adminUser.email }),
           role: 'admin',
           joinedAt: new Date().toISOString()
         }],
@@ -155,7 +155,7 @@ export class FirebaseGroupService {
       batch.set(userRef, {
         id: groupData.adminUser.id,
         name: groupData.adminUser.name,
-        email: groupData.adminUser.email,
+        ...(groupData.adminUser.email && { email: groupData.adminUser.email }),
         groups: arrayUnion(group.id),
         currentGroupId: group.id,
         createdAt: serverTimestamp(),
@@ -240,7 +240,7 @@ export class FirebaseGroupService {
       memberDetails.push({
         id: user.id,
         name: user.name,
-        email: user.email,
+        ...(user.email && { email: user.email }),
         role: 'member',
         joinedAt: new Date().toISOString()
       });
@@ -256,7 +256,7 @@ export class FirebaseGroupService {
       batch.set(userRef, {
         id: user.id,
         name: user.name,
-        email: user.email,
+        ...(user.email && { email: user.email }),
         groups: arrayUnion(group.id),
         currentGroupId: group.id,
         createdAt: serverTimestamp(),
@@ -455,13 +455,29 @@ export class FirebaseGroupService {
     
     try {
       const userRef = doc(db, this.USERS_COLLECTION, user.id);
-      await setDoc(userRef, {
+      const userData: any = {
         id: user.id,
         name: user.name,
-        email: user.email,
         language: user.language,
         updatedAt: serverTimestamp()
-      }, { merge: true }); // merge: true preserves existing fields like groups
+      };
+      
+      // Only add email if it exists
+      if (user.email) {
+        userData.email = user.email;
+      }
+      
+      // Add phone number if it exists
+      if (user.phoneNumber) {
+        userData.phoneNumber = user.phoneNumber;
+      }
+      
+      // Add auth method if it exists
+      if (user.authMethod) {
+        userData.authMethod = user.authMethod;
+      }
+      
+      await setDoc(userRef, userData, { merge: true }); // merge: true preserves existing fields like groups
       
       console.log('[FIREBASE_GROUP] ✅ User data updated in Firebase');
     } catch (error) {
@@ -486,7 +502,7 @@ export class FirebaseGroupService {
         memberDetails: arrayUnion({
           id: user.id,
           name: user.name,
-          email: user.email,
+          ...(user.email && { email: user.email }),
           role: 'member',
           joinedAt: new Date().toISOString()
         }),
@@ -498,7 +514,7 @@ export class FirebaseGroupService {
       batch.set(userRef, {
         id: user.id,
         name: user.name,
-        email: user.email,
+        ...(user.email && { email: user.email }),
         groups: arrayUnion(groupId),
         currentGroupId: groupId,
         updatedAt: serverTimestamp()

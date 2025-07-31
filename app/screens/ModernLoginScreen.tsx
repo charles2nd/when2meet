@@ -1,15 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   View, 
   Text, 
   TextInput, 
   TouchableOpacity, 
   StyleSheet, 
-  Alert, 
-  StatusBar,
+  ScrollView,
   KeyboardAvoidingView,
-  Platform,
-  ScrollView
+  Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,168 +18,339 @@ import { getWebStyle } from '../utils/webStyles';
 import { SafeHeader } from '../components/SafeHeader';
 import { AppLogo } from '../components/AppLogo';  
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
-import { translations } from '../services/translations';
+// Phone authentication is handled through AuthContext
+import { PhoneAuthModal } from '../components/modals/PhoneAuthModal';
+import { showToast } from '../components/Toast';
 
 const ModernLoginScreen: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isSignUpMode, setIsSignUpMode] = useState(false);
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const { signIn, signUp, signInGoogle, loading } = useAuth();
+  const [step, setStep] = useState<'phone' | 'verify'>('phone');
+  const [confirmation, setConfirmation] = useState<any>(null);
+  const [phoneError, setPhoneError] = useState('');
+  const [codeError, setCodeError] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
+  const [sessionId, setSessionId] = useState<string>('');
+  
+  // Modal states
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<'success' | 'error' | 'verification'>('success');
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  
+  const { signInPhone, verifyPhoneCode, signInGoogle, loading } = useAuth();
   const { language, setLanguage, t } = useApp();
   const router = useRouter();
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email.trim()) {
-      setEmailError(t.login.emailRequired || 'Email is required');
-      return false;
-    }
-    if (!emailRegex.test(email)) {
-      setEmailError(t.login.emailInvalid || 'Please enter a valid email address');
-      return false;
-    }
-    setEmailError('');
-    return true;
-  };
+  // Phone authentication is now handled entirely through AuthContext
 
-  const validatePassword = (password: string) => {
-    if (!password.trim()) {
-      setPasswordError(t.login.passwordRequired || 'Password is required');
+  const validatePhoneNumber = (phone: string) => {
+    if (!phone.trim()) {
+      const errorMessage = t.phone.phoneRequired || 'Phone number is required';
+      setPhoneError(errorMessage);
+      showToast(errorMessage, 'error');
       return false;
     }
-    if (isSignUpMode && password.length < 6) {
-      setPasswordError(t.login.passwordTooShort || 'Password must be at least 6 characters');
-      return false;
-    }
-    setPasswordError('');
-    return true;
-  };
-
-  const handleLogin = async () => {
-    const isEmailValid = validateEmail(email);
-    const isPasswordValid = validatePassword(password);
     
-    if (!isEmailValid || !isPasswordValid) {
+    // Extract digits from formatted display (e.g., "569 943 2895" -> "5699432895")
+    const digits = phone.replace(/\D/g, '');
+    
+    // Check for test number
+    if (digits === '1234567891') {
+      setPhoneError('');
+      return true;
+    }
+    
+    // Check for valid phone number (10 digits) - no area code validation
+    if (digits.length === 10) {
+      setPhoneError('');
+      return true;
+    }
+    
+    // Check for 11-digit number with country code - no area code validation
+    if (digits.length === 11 && digits.startsWith('1')) {
+      setPhoneError('');
+      return true;
+    }
+    
+    // Invalid length
+    const errorMessage = 'Please enter a 10-digit phone number (e.g., 123 456 4323)';
+    setPhoneError(errorMessage);
+    showToast(errorMessage, 'error');
+    return false;
+  };
+
+  const formatPhoneNumberForDisplay = (text: string) => {
+    // Remove all non-digit characters for processing
+    let digits = text.replace(/\D/g, '');
+    
+    // Handle test number first
+    if (digits === '1234567891') {
+      return '123 456 7891';
+    }
+    
+    // Format US/Canada numbers (10 or 11 digits)
+    if (digits.length === 10) {
+      // Format: 569 943 2895
+      return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+    } else if (digits.length === 11 && digits.startsWith('1')) {
+      // Format: 1 569 943 2895 (with country code)
+      return `${digits.slice(0, 1)} ${digits.slice(1, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+    } else if (digits.length > 0 && digits.length <= 3) {
+      // First 3 digits
+      return digits;
+    } else if (digits.length > 3 && digits.length <= 6) {
+      // First 6 digits: 569 943
+      return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+    } else if (digits.length > 6 && digits.length <= 10) {
+      // Up to 10 digits: 569 943 2895
+      return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+    } else if (digits.length > 10) {
+      // More than 10 digits, assume country code: 1 569 943 2895
+      return `${digits.slice(0, digits.length - 10)} ${digits.slice(-10, -7)} ${digits.slice(-7, -4)} ${digits.slice(-4)}`;
+    }
+    
+    return text;
+  };
+
+  const convertToE164 = (displayNumber: string) => {
+    // Remove all non-digit characters
+    let digits = displayNumber.replace(/\D/g, '');
+    
+    // Handle test number
+    if (digits === '1234567891') {
+      return '+11234567891';
+    }
+    
+    // Auto-detect and format for E.164
+    if (digits.length === 10) {
+      // US/Canada: add +1
+      return `+1${digits}`;
+    } else if (digits.length === 11 && digits.startsWith('1')) {
+      // Already has country code
+      return `+${digits}`;
+    }
+    
+    // Default: assume US and add +1
+    return `+1${digits}`;
+  };
+
+  const validateVerificationCode = (code: string) => {
+    if (!code.trim()) {
+      setCodeError('Verification code is required');
+      return false;
+    }
+    if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+      setCodeError('Please enter a valid 6-digit code');
+      return false;
+    }
+    setCodeError('');
+    return true;
+  };
+
+  const handleSendCode = async () => {
+    if (!validatePhoneNumber(phoneNumber)) {
       return;
     }
 
     setIsLoading(true);
     try {
-      const success = await signIn(email.trim(), password.trim());
+      const formattedNumber = convertToE164(phoneNumber);
+      
+      // Use AuthContext's signInPhone function
+      console.log('[LOGIN] Sending verification code through AuthContext for:', formattedNumber);
+      const result = await signInPhone(formattedNumber);
+      console.log('[LOGIN] AuthContext signInPhone result:', result);
+      
+      // Extract data from the result
+      if (result && result.confirmationResult && result.sessionId) {
+        setConfirmation(result.confirmationResult);
+        setSessionId(result.sessionId);
+        console.log('[LOGIN] ✅ Successfully set confirmation and sessionId');
+      } else {
+        console.error('[LOGIN] ❌ Invalid result structure:', result);
+        throw new Error('Invalid response from phone authentication service');
+      }
+      setStep('verify');
+      startResendTimer();
+      
+      // Show success toast with user-friendly format  
+      showToast(`📱 Code sent to ${phoneNumber}`, 'success');
+      
+      // Show success modal for code sent
+      setModalType('verification');
+      setModalTitle(t.phone.codeSent || 'Code Sent');
+      setModalMessage(`${t.phone.verificationCodeSentTo || 'Verification code sent to'} ${phoneNumber}`);
+      setShowVerificationModal(true);
+    } catch (error: any) {
+      console.error('[LOGIN] Send code error:', error);
+      
+      // Handle specific error messages
+      let errorMessage = t.phone.failedToSendCode || 'Failed to send verification code';
+      
+      if (error.message?.includes('RATE_LIMITED')) {
+        const remainingTime = error.message.split('_')[2];
+        errorMessage = `Too many attempts. Please wait ${remainingTime} seconds.`;
+      } else if (error.message === 'TOO_MANY_SMS_ATTEMPTS') {
+        errorMessage = 'Too many SMS attempts. Please wait 15 minutes.';
+      } else if (error.message === 'INVALID_PHONE_NUMBER') {
+        errorMessage = 'Invalid phone number. For testing, use: 123 456 7891';
+      } else if (error.message === 'SMS_QUOTA_EXCEEDED') {
+        errorMessage = 'SMS service temporarily unavailable. Please try again later.';
+      }
+      
+      // Show toast notification for immediate feedback
+      showToast(errorMessage, 'error');
+      
+      // Show error modal
+      setModalType('error');
+      setModalTitle(t.common.error || 'Error');
+      setModalMessage(errorMessage);
+      setModalVisible(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!validateVerificationCode(verificationCode)) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Use AuthContext's verifyPhoneCode to properly set user state
+      console.log('[LOGIN] Verifying code through AuthContext with sessionId:', sessionId);
+      const success = await verifyPhoneCode(confirmation, verificationCode, sessionId);
+      
       if (success) {
-        console.log('[LOGIN] Login successful, navigating to group page...');
+        console.log('[LOGIN] ✅ Phone verification successful through AuthContext, navigating to group page...');
+        // Close verification modal on success
+        setShowVerificationModal(false);
         
+        // Show success toast
+        showToast('Phone number verified successfully!', 'success');
         
-        // Force navigation after successful login
+        // Navigate to group page
         setTimeout(() => {
           router.replace('/(tabs)/group');
-        }, 100);
+        }, 500);
       } else {
-        console.error('[LOGIN] ❌ Login failed:', t.login.invalidCredentials);
+        const errorMessage = t.phone.invalidCode || 'Invalid verification code. Please try again.';
+        showToast(errorMessage, 'error');
+        setModalType('error');
+        setModalTitle(t.common.error || 'Error');
+        setModalMessage(errorMessage);
+        setModalVisible(true);
       }
-    } catch (error) {
-      console.error('[LOGIN] Login error:', error);
-      console.error('[LOGIN] ❌ Login error message:', t.login.loginErrorMessage);
+    } catch (error: any) {
+      console.error('[LOGIN] Verification error:', error);
+      
+      // Handle specific error messages
+      let errorMessage = t.phone.verificationFailed || 'Verification failed. Please try again.';
+      
+      if (error.message === 'INVALID_VERIFICATION_CODE') {
+        errorMessage = t.phone.invalidCode || 'Invalid verification code. Please try again.';
+      } else if (error.message === 'CODE_EXPIRED') {
+        errorMessage = 'Verification code has expired. Please request a new one.';
+      } else if (error.message === 'SESSION_EXPIRED') {
+        errorMessage = 'Session expired. Please start over.';
+        setStep('phone');
+      } else if (error.message === 'TOO_MANY_VERIFICATION_ATTEMPTS') {
+        errorMessage = 'Too many failed attempts. Please request a new code.';
+        setStep('phone');
+      } else if (error.message === 'INVALID_SESSION') {
+        errorMessage = 'Invalid session. Please start over.';
+        setStep('phone');
+      }
+      
+      // Show error modal
+      setModalType('error');
+      setModalTitle(t.common.error || 'Error');
+      setModalMessage(errorMessage);
+      setModalVisible(true);
     } finally {
       setIsLoading(false);
     }
   };
   
-  const handleSignUp = async () => {
-    if (!email.trim() || !password.trim() || !displayName.trim()) {
-      console.log('[SIGNUP] ❌ Missing fields: Please fill in all required fields');
-      return;
-    }
-    
-    if (password !== confirmPassword) {
-      console.log('[SIGNUP] ❌ Password mismatch: Passwords do not match');
-      return;
-    }
-    
-    if (password.length < 6) {
-      console.log('[SIGNUP] ❌ Password too short: Password must be at least 6 characters');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const success = await signUp(email.trim(), password.trim(), displayName.trim());
-      if (success) {
-        console.log('[SIGNUP] Account created successfully');
-        
-        
-        // Force navigation after successful signup
-        setTimeout(() => {
-          router.replace('/(tabs)/group');
-        }, 100);
-      } else {
-        console.error('[SIGNUP] ❌ Account creation failed: Failed to create account. Please try again.');
-      }
-    } catch (error) {
-      console.error('[SIGNUP] Sign up error:', error);
-      let errorMessage = 'Failed to create account. Please try again.';
-      
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email is already registered. Try signing in instead.';
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = 'Password is too weak. Please choose a stronger password.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Please enter a valid email address.';
-      }
-      
-      console.error('[SIGNUP] ❌ Sign up error:', errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
+  // Start resend timer
+  const startResendTimer = () => {
+    setResendTimer(60);
+    const timer = setInterval(() => {
+      setResendTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
   };
 
-  const handleGoogleLogin = async () => {
+  const handleResendCode = async () => {
+    if (resendTimer > 0) return;
+    await handleSendCode();
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
       const success = await signInGoogle();
       if (success) {
-        console.log('[LOGIN] Google login successful, navigating to group page...');
-        
-        
+        console.log('[LOGIN] Google sign-in successful, navigating to group page...');
         setTimeout(() => {
           router.replace('/(tabs)/group');
         }, 100);
       } else {
-        console.error('[GOOGLE_LOGIN] ❌ Google login failed:', t.login.googleLoginFailedMessage);
+        setModalType('error');
+        setModalTitle(t.login.googleLoginFailed || 'Google Sign-In Failed');
+        setModalMessage(t.login.googleLoginFailedMessage || 'Unable to sign in with Google. Please try again.');
+        setModalVisible(true);
       }
-    } catch (error) {
-      console.error('[LOGIN] Google login error:', error);
-      console.error('[GOOGLE] ❌ Google login error:', t.login.googleLoginErrorMessage);
+    } catch (error: any) {
+      console.error('[LOGIN] Google sign-in error:', error);
+      setModalType('error');
+      setModalTitle(t.login.googleLoginError || 'Google Sign-In Error');
+      setModalMessage(t.login.googleLoginErrorMessage || 'An error occurred during Google sign-in.');
+      setModalVisible(true);
     } finally {
       setIsLoading(false);
     }
   };
 
-  
-  const toggleAuthMode = () => {
-    setIsSignUpMode(!isSignUpMode);
-    setEmail('');
-    setPassword('');
-    setConfirmPassword('');
-    setDisplayName('');
+  const handleVerificationModalSubmit = async (code: string) => {
+    setVerificationCode(code);
+    if (code.length === 6) {
+      await handleVerifyCode();
+    }
+  };
+
+  const handleModalClose = () => {
+    setModalVisible(false);
+    setShowVerificationModal(false);
+  };
+
+  const handleResendFromModal = async () => {
+    setShowVerificationModal(false);
+    await handleResendCode();
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <SafeHeader
         title="When2Meet"
-        subtitle="Find the perfect meeting time"
+        subtitle={step === 'phone' ? 'Sign in with your phone number' : 'Verify your phone number'}
         colors={[Colors.primary, Colors.primaryDark, Colors.tactical.dark]}
       >
         <View style={styles.headerContent}>
           <View style={styles.logoContainer}>
-            <AppLogo size={60} variant="icon" showShadow={true} />
+            <AppLogo size={50} variant="icon" showShadow={true} />
           </View>
           
           {/* Language Switcher */}
@@ -202,197 +371,221 @@ const ModernLoginScreen: React.FC = () => {
         </View>
       </SafeHeader>
 
-      {/* Login Form */}
-      <View style={styles.formContainer}>
+      {/* Phone Authentication Form */}
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.formContainer}>
           <View style={styles.loginCard}>
-            <Text style={styles.loginTitle}>{isSignUpMode ? t.login.createAccount : t.login.welcomeBack}</Text>
-            <Text style={styles.loginSubtitle}>{isSignUpMode ? t.login.signUpForNewAccount : t.login.signInToYourAccount}</Text>
-            
-            {/* Display Name Input (Sign Up Only) */}
-            {isSignUpMode && (
+          {step === 'phone' ? (
+            <>
+              <View style={styles.iconContainer}>
+                <Ionicons name="phone-portrait" size={48} color={Colors.accent} />
+              </View>
+              
+              <Text style={styles.loginTitle}>{t.phone.enterPhoneNumber || 'Enter Phone Number'}</Text>
+              <Text style={styles.loginSubtitle}>
+                {t.phone.sendVerificationCode || 'Enter your phone number. Country code will be auto-detected.'}
+              </Text>
+              
+              {/* Phone Number Input */}
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t.login.enterDisplayName}</Text>
+                <Text style={styles.inputLabel}>{t.phone.phoneNumber || 'Phone Number'}</Text>
                 <View style={styles.inputWrapper}>
                   <Ionicons 
-                    name="person-outline" 
+                    name="call-outline" 
                     size={20} 
                     color={Colors.text.secondary} 
                     style={styles.inputIcon}
                   />
                   <TextInput
                     style={[styles.input, getWebStyle('textInput')]}
-                    placeholder={t.login.enterDisplayName}
+                    placeholder="569 943 2895"
                     placeholderTextColor={Colors.text.tertiary}
-                    value={displayName}
-                    onChangeText={setDisplayName}
-                    autoCapitalize="words"
-                    autoComplete="name"
+                    value={phoneNumber}
+                    onChangeText={(text) => {
+                      const formatted = formatPhoneNumberForDisplay(text);
+                      setPhoneNumber(formatted);
+                    }}
+                    keyboardType="phone-pad"
+                    autoComplete="tel"
+                    textContentType="telephoneNumber"
                     accessible={true}
-                    accessibilityLabel="Display name input"
-                    accessibilityHint="Enter your full name as it will appear to other users"
-                    returnKeyType="next"
+                    accessibilityLabel="Phone number input"
+                    accessibilityHint="Enter your phone number to receive a verification code"
+                    returnKeyType="send"
+                    onSubmitEditing={handleSendCode}
+                    maxLength={14} // Max length for "1 569 943 2895"
                   />
                 </View>
+                {phoneError ? (
+                  <Text style={styles.errorText}>{phoneError}</Text>
+                ) : null}
               </View>
-            )}
-            
-            {/* Email Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t.login.email}</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons 
-                  name="mail-outline" 
-                  size={20} 
-                  color={Colors.text.secondary} 
-                  style={styles.inputIcon}
-                />
-                <TextInput
-                  style={[styles.input, getWebStyle('textInput')]}
-                  placeholder={t.login.enterEmail}
-                  placeholderTextColor={Colors.text.tertiary}
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  accessible={true}
-                  accessibilityLabel="Email address input"
-                  accessibilityHint="Enter your email address to sign in"
-                  returnKeyType="next"
-                  textContentType="emailAddress"
-                  onBlur={() => validateEmail(email)}
-                />
-              </View>
-              {emailError ? (
-                <Text style={styles.errorText}>{emailError}</Text>
-              ) : null}
-            </View>
-            
-            {/* Password Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t.login.password}</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons 
-                  name="lock-closed-outline" 
-                  size={20} 
-                  color={Colors.text.secondary} 
-                  style={styles.inputIcon}
-                />
-                <TextInput
-                  style={[styles.input, styles.passwordInput, getWebStyle('textInput')]}
-                  placeholder={isSignUpMode ? t.login.createPassword : t.login.enterPassword}
-                  placeholderTextColor={Colors.text.tertiary}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoComplete={isSignUpMode ? "new-password" : "password"}
-                  accessible={true}
-                  accessibilityLabel="Password input"
-                  accessibilityHint={isSignUpMode ? "Create a new password with at least 6 characters" : "Enter your password"}
-                  returnKeyType={isSignUpMode ? "next" : "go"}
-                  textContentType="password"
-                  onBlur={() => validatePassword(password)}
-                />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() => setShowPassword(!showPassword)}
-                  accessible={true}
-                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-                  accessibilityRole="button"
+              
+              {/* Send Code Button */}
+              <TouchableOpacity 
+                style={[styles.loginButton, getWebStyle('touchableOpacity')]} 
+                onPress={handleSendCode}
+                disabled={isLoading || loading}
+                accessible={true}
+                accessibilityLabel="Send verification code button"
+                accessibilityHint="Tap to send a verification code to your phone"
+                accessibilityRole="button"
+              >
+                <LinearGradient
+                  colors={[Colors.accent, Colors.accentDark]}
+                  style={styles.loginGradient}
                 >
-                  <Ionicons 
-                    name={showPassword ? "eye-outline" : "eye-off-outline"} 
-                    size={20} 
-                    color={Colors.text.secondary}
-                  />
-                </TouchableOpacity>
+                  {isLoading || loading ? (
+                    <Text style={styles.loginText}>{t.phone.sendingCode || 'Sending...'}</Text>
+                  ) : (
+                    <>
+                      <Ionicons name="paper-plane" size={20} color={Colors.text.inverse} />
+                      <Text style={styles.loginText}>{t.phone.sendCode || 'Send Code'}</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+              
+              {/* Google Sign-In Button */}
+              <TouchableOpacity 
+                style={[styles.googleButton, getWebStyle('touchableOpacity')]} 
+                onPress={handleGoogleSignIn}
+                disabled={isLoading || loading}
+                accessible={true}
+                accessibilityLabel="Sign in with Google button"
+                accessibilityHint="Tap to sign in with your Google account"
+                accessibilityRole="button"
+              >
+                <View style={styles.googleButtonContent}>
+                  <Ionicons name="logo-google" size={20} color="#4285F4" />
+                  <Text style={styles.googleButtonText}>{t.login.continueWithGoogle || 'Continue with Google'}</Text>
+                </View>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <View style={styles.iconContainer}>
+                <Ionicons name="shield-checkmark" size={48} color={Colors.success} />
               </View>
-              {passwordError ? (
-                <Text style={styles.errorText}>{passwordError}</Text>
-              ) : null}
-            </View>
-            
-            {/* Confirm Password Input (Sign Up Only) */}
-            {isSignUpMode && (
+              
+              <Text style={styles.loginTitle}>{t.phone.verifyPhone || 'Verify Your Phone'}</Text>
+              <Text style={styles.loginSubtitle}>
+                {t.phone.enter6DigitCode || 'Enter the 6-digit code sent to'} {phoneNumber}
+              </Text>
+              
+              {/* Verification Code Input */}
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t.login.confirmPassword}</Text>
+                <Text style={styles.inputLabel}>{t.phone.verificationCode || 'Verification Code'}</Text>
                 <View style={styles.inputWrapper}>
                   <Ionicons 
-                    name="lock-closed-outline" 
+                    name="keypad-outline" 
                     size={20} 
                     color={Colors.text.secondary} 
                     style={styles.inputIcon}
                   />
                   <TextInput
-                    style={[styles.input, styles.passwordInput, getWebStyle('textInput')]}
-                    placeholder="Confirm your password"
+                    style={[styles.input, styles.codeInput, getWebStyle('textInput')]}
+                    placeholder="123456"
                     placeholderTextColor={Colors.text.tertiary}
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry={!showPassword}
-                    autoComplete="new-password"
+                    value={verificationCode}
+                    onChangeText={setVerificationCode}
+                    keyboardType="numeric"
+                    maxLength={6}
+                    autoComplete="sms-otp"
+                    textContentType="oneTimeCode"
+                    accessible={true}
+                    accessibilityLabel="Verification code input"
+                    accessibilityHint="Enter the 6-digit code sent to your phone"
+                    returnKeyType="done"
+                    onSubmitEditing={handleVerifyCode}
                   />
                 </View>
+                {codeError ? (
+                  <Text style={styles.errorText}>{codeError}</Text>
+                ) : null}
               </View>
-            )}
-            
-            {/* Login/SignUp Button */}
-            <TouchableOpacity 
-              style={[styles.loginButton, getWebStyle('touchableOpacity')]} 
-              onPress={isSignUpMode ? handleSignUp : handleLogin}
-              disabled={isLoading || loading}
-              accessible={true}
-              accessibilityLabel={isSignUpMode ? "Create account button" : "Sign in button"}
-              accessibilityHint={isSignUpMode ? "Tap to create your new account" : "Tap to sign in to your account"}
-              accessibilityRole="button"
-            >
-              <LinearGradient
-                colors={[Colors.accent, '#FF8F00']}
-                style={styles.loginGradient}
+              
+              {/* Verify Code Button */}
+              <TouchableOpacity 
+                style={[styles.loginButton, getWebStyle('touchableOpacity')]} 
+                onPress={handleVerifyCode}
+                disabled={isLoading || loading}
+                accessible={true}
+                accessibilityLabel="Verify code button"
+                accessibilityHint="Tap to verify the code and sign in"
+                accessibilityRole="button"
               >
-                {isLoading || loading ? (
-                  <Text style={styles.loginText}>{isSignUpMode ? t.login.creatingAccount : t.login.signingIn}</Text>
-                ) : (
-                  <>
-                    <Ionicons name={isSignUpMode ? "person-add-outline" : "log-in-outline"} size={20} color={Colors.text.inverse} />
-                    <Text style={styles.loginText}>{isSignUpMode ? t.login.createAccount : t.login.signIn}</Text>
-                  </>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-            
-            {/* Toggle Auth Mode */}
-            <TouchableOpacity 
-              style={styles.toggleButton}
-              onPress={toggleAuthMode}
-              disabled={isLoading || loading}
-            >
-              <Text style={styles.toggleText}>
-                {isSignUpMode ? t.login.alreadyHaveAccount : t.login.dontHaveAccount}
-                <Text style={styles.toggleLink}>{isSignUpMode ? t.login.signIn : t.login.signUp}</Text>
-              </Text>
-            </TouchableOpacity>
-
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Google Login */}
-            <TouchableOpacity 
-              style={[styles.googleButton, getWebStyle('touchableOpacity')]} 
-              onPress={handleGoogleLogin}
-              disabled={isLoading || loading}
-            >
-              <Ionicons name="logo-google" size={20} color={Colors.text.primary} />
-              <Text style={styles.googleText}>{isSignUpMode ? t.login.signUpWithGoogle : t.login.continueWithGoogle}</Text>
-            </TouchableOpacity>
-
+                <LinearGradient
+                  colors={[Colors.success, '#388E3C']}
+                  style={styles.loginGradient}
+                >
+                  {isLoading || loading ? (
+                    <Text style={styles.loginText}>{t.phone.verifying || 'Verifying...'}</Text>
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={20} color={Colors.text.inverse} />
+                      <Text style={styles.loginText}>{t.phone.verifyCode || 'Verify Code'}</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+              
+              {/* Resend Code */}
+              <View style={styles.resendContainer}>
+                <TouchableOpacity
+                  onPress={handleResendCode}
+                  disabled={resendTimer > 0}
+                  style={[styles.resendButton, resendTimer > 0 && styles.resendButtonDisabled]}
+                >
+                  <Text style={[styles.resendButtonText, resendTimer > 0 && styles.resendButtonTextDisabled]}>
+                    {resendTimer > 0 ? `${t.phone.resendIn || 'Resend in'} ${resendTimer}s` : t.phone.resendCode || 'Resend Code'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
+              {/* Change Phone Number */}
+              <TouchableOpacity
+                onPress={() => setStep('phone')}
+                style={styles.changePhoneButton}
+              >
+                <Text style={styles.changePhoneButtonText}>{t.phone.changePhoneNumber || 'Change Phone Number'}</Text>
+              </TouchableOpacity>
+            </>
+          )}
           </View>
         </View>
-      </View>
+      </ScrollView>
+      
+      {/* Custom Modals */}
+      <PhoneAuthModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        onClose={handleModalClose}
+      />
+      
+      <PhoneAuthModal
+        visible={showVerificationModal}
+        type="verification"
+        title={modalTitle}
+        message={modalMessage}
+        onClose={handleModalClose}
+        showVerificationInput={true}
+        verificationCode={verificationCode}
+        onVerificationCodeChange={setVerificationCode}
+        onVerificationSubmit={handleVerificationModalSubmit}
+        isLoading={isLoading}
+        showResendButton={true}
+        onResend={handleResendFromModal}
+        resendTimer={resendTimer}
+      />
+    </KeyboardAvoidingView>
   );
 };
 
@@ -401,11 +594,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  header: {
-    paddingTop: 50,
-    paddingBottom: 30,
-    paddingHorizontal: Spacing.lg,
-    alignItems: 'center',
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    minHeight: '70%',
   },
   headerContent: {
     flexDirection: 'row',
@@ -441,26 +636,6 @@ const styles = StyleSheet.create({
   activeLanguageButtonText: {
     color: Colors.text.inverse,
   },
-  logoGradient: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Shadows.lg,
-  },
-  appTitle: {
-    fontSize: 28,
-    fontWeight: Typography.weights.bold,
-    color: Colors.text.primary,
-    marginBottom: Spacing.xs,
-    textAlign: 'center',
-  },
-  appSubtitle: {
-    fontSize: Typography.sizes.sm,
-    color: 'rgba(255, 255, 255, 0.9)',
-    textAlign: 'center',
-  },
   formContainer: {
     flex: 1,
     paddingHorizontal: Spacing.lg,
@@ -475,6 +650,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border.light,
     ...Shadows.xl,
+  },
+  iconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.tactical.medium,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+    borderWidth: 3,
+    borderColor: Colors.accent,
+    alignSelf: 'center',
   },
   loginTitle: {
     fontSize: Typography.sizes.xl,
@@ -519,12 +706,10 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     backgroundColor: 'transparent',
   },
-  passwordInput: {
-    paddingRight: 0,
-  },
-  eyeButton: {
-    padding: Spacing.sm,
-    marginLeft: Spacing.xs,
+  codeInput: {
+    textAlign: 'center',
+    letterSpacing: 8,
+    fontSize: Typography.sizes.xl,
   },
   loginButton: {
     borderRadius: BorderRadius.lg,
@@ -545,54 +730,37 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.bold,
     color: Colors.text.inverse,
   },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  resendContainer: {
     marginVertical: Spacing.md,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.border.light,
-  },
-  dividerText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.text.tertiary,
-    marginHorizontal: Spacing.md,
-    fontWeight: Typography.weights.medium,
-  },
-  googleButton: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.surface,
-    borderWidth: 2,
-    borderColor: Colors.border.medium,
-    borderRadius: BorderRadius.lg,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
-    gap: Spacing.sm,
-    ...Shadows.sm,
   },
-  googleText: {
-    fontSize: Typography.sizes.md,
-    fontWeight: Typography.weights.medium,
-    color: Colors.text.primary,
-  },
-  toggleButton: {
-    alignItems: 'center',
-    marginTop: Spacing.md,
+  resendButton: {
     paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
   },
-  toggleText: {
+  resendButtonDisabled: {
+    opacity: 0.5,
+  },
+  resendButtonText: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.accent,
+    fontWeight: Typography.weights.medium,
+    textDecorationLine: 'underline',
+  },
+  resendButtonTextDisabled: {
+    color: Colors.text.tertiary,
+    textDecorationLine: 'none',
+  },
+  changePhoneButton: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  changePhoneButtonText: {
     fontSize: Typography.sizes.sm,
     color: Colors.text.secondary,
     textAlign: 'center',
-  },
-  toggleLink: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.accent,
-    fontWeight: Typography.weights.bold,
+    textDecorationLine: 'underline',
   },
   errorText: {
     fontSize: Typography.sizes.sm,
@@ -600,6 +768,26 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xs,
     marginLeft: Spacing.sm,
     fontWeight: Typography.weights.medium,
+  },
+  googleButton: {
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.surface,
+    borderWidth: 2,
+    borderColor: Colors.border.medium,
+    marginTop: Spacing.md,
+  },
+  googleButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.sm,
+  },
+  googleButtonText: {
+    fontSize: Typography.sizes.md,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.text.primary,
   },
 });
 
