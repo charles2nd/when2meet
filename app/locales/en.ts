@@ -138,7 +138,7 @@ export default {
     },
   },
   auth: {
-    welcome: 'Welcome to When2Meet',
+    welcome: 'Welcome to Meet2Gether',
     signInToContinue: 'Sign in to continue',
     email: 'Email',
     emailPlaceholder: 'Enter your email',

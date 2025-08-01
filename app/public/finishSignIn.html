@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sign In - When2Meet</title>
+    <title>Sign In - Meet2Gether</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -31,7 +31,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>When2Meet</h1>
+        <h1>Meet2Gether</h1>
         <div id="status" class="loading">Processing sign-in...</div>
         <div id="message"></div>
     </div>
@@ -48,14 +48,14 @@
                 document.getElementById('status').textContent = 'Redirecting to app...';
                 
                 // Try to open the app with custom scheme
-                const appUrl = `when2meet://finishSignIn${window.location.search}`;
+                const appUrl = `meet2gether://finishSignIn${window.location.search}`;
                 window.location.href = appUrl;
                 
                 // Fallback message after a delay
                 setTimeout(() => {
-                    document.getElementById('status').textContent = 'Continue in the When2Meet app';
+                    document.getElementById('status').textContent = 'Continue in the Meet2Gether app';
                     document.getElementById('message').innerHTML = 
-                        'If the app didn\'t open automatically, please open the When2Meet app manually.';
+                        'If the app didn\'t open automatically, please open the Meet2Gether app manually.';
                 }, 3000);
             } else {
                 document.getElementById('status').className = 'error';

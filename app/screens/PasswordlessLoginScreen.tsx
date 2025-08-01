@@ -132,7 +132,7 @@ const PasswordlessLoginScreen: React.FC = () => {
           <View style={styles.logoContainer}>
             <AppLogo size={70} variant="icon" showShadow={true} />
           </View>
-          <Text style={styles.appTitle}>When2Meet</Text>
+          <Text style={styles.appTitle}>Meet2Gether</Text>
           <Text style={styles.appSubtitle}>Find the perfect meeting time</Text>
         </LinearGradient>
 

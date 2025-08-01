@@ -201,11 +201,11 @@ const GroupScreen: React.FC = () => {
     // For development, use the app scheme directly
     // This will work with your dev client
     if (__DEV__) {
-      return `when2meet://join/${currentGroup.code}`;
+      return `meet2gether://join/${currentGroup.code}`;
     }
     
     // For production, use a web URL that can redirect to the app
-    const baseUrl = 'https://when2meet.app'; // Replace with your actual domain
+    const baseUrl = 'https://meet2gether.app'; // Replace with your actual domain
     return `${baseUrl}/join/${currentGroup.code}`;
   };
 

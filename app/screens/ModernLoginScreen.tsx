@@ -344,7 +344,7 @@ const ModernLoginScreen: React.FC = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <SafeHeader
-        title={t.group.loginPageTitle || 'When2Meet'}
+        title={t.group.loginPageTitle || 'Meet2Gether'}
         subtitle={step === 'phone' ? (t.group.loginPageSubtitle || 'Sign in with your phone number') : (t.group.verifyPageSubtitle || 'Verify your phone number')}
         colors={[Colors.primary, Colors.primaryDark, Colors.tactical.dark]}
       >
@@ -382,9 +382,6 @@ const ModernLoginScreen: React.FC = () => {
           <View style={styles.loginCard}>
           {step === 'phone' ? (
             <>
-              <View style={styles.iconContainer}>
-                <Ionicons name="phone-portrait" size={48} color={Colors.accent} />
-              </View>
               
               <Text style={styles.loginTitle}>{t.phone.enterPhoneNumber || 'Enter Phone Number'}</Text>
               <Text style={styles.loginSubtitle}>
@@ -394,33 +391,25 @@ const ModernLoginScreen: React.FC = () => {
               {/* Phone Number Input */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>{t.phone.phoneNumber || 'Phone Number'}</Text>
-                <View style={styles.inputWrapper}>
-                  <Ionicons 
-                    name="call-outline" 
-                    size={20} 
-                    color={Colors.text.secondary} 
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    style={[styles.input, getWebStyle('textInput')]}
-                    placeholder="569 943 2895"
-                    placeholderTextColor={Colors.text.tertiary}
-                    value={phoneNumber}
-                    onChangeText={(text) => {
-                      const formatted = formatPhoneNumberForDisplay(text);
-                      setPhoneNumber(formatted);
-                    }}
-                    keyboardType="phone-pad"
-                    autoComplete="tel"
-                    textContentType="telephoneNumber"
-                    accessible={true}
-                    accessibilityLabel="Phone number input"
-                    accessibilityHint="Enter your phone number to receive a verification code"
-                    returnKeyType="send"
-                    onSubmitEditing={handleSendCode}
-                    maxLength={14} // Max length for "1 569 943 2895"
-                  />
-                </View>
+                <TextInput
+                  style={[styles.input, styles.cleanInput, getWebStyle('textInput')]}
+                  placeholder="569 943 2895"
+                  placeholderTextColor={Colors.text.tertiary}
+                  value={phoneNumber}
+                  onChangeText={(text) => {
+                    const formatted = formatPhoneNumberForDisplay(text);
+                    setPhoneNumber(formatted);
+                  }}
+                  keyboardType="phone-pad"
+                  autoComplete="tel"
+                  textContentType="telephoneNumber"
+                  accessible={true}
+                  accessibilityLabel="Phone number input"
+                  accessibilityHint="Enter your phone number to receive a verification code"
+                  returnKeyType="send"
+                  onSubmitEditing={handleSendCode}
+                  maxLength={14} // Max length for "1 569 943 2895"
+                />
                 {phoneError ? (
                   <Text style={styles.errorText}>{phoneError}</Text>
                 ) : null}
@@ -705,6 +694,14 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.md,
     color: Colors.text.primary,
     backgroundColor: 'transparent',
+  },
+  cleanInput: {
+    backgroundColor: Colors.tactical.light,
+    borderWidth: 2,
+    borderColor: Colors.border.light,
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.lg,
+    flex: 0,
   },
   codeInput: {
     textAlign: 'center',
