@@ -1,23 +1,24 @@
 {
   "expo": {
-    "name": "When2Meet",
-    "slug": "when2meet",
-    "version": "1.0.0",
+    "name": "Meet2Gether",
+    "slug": "meet2gether",
+    "version": "1.3.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "when2meet",
+    "icon": "./assets/images/app_icon.png",
+    "scheme": "meet2gether",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/app_icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.when2meet.app", 
+      "bundleIdentifier": "com.meet2gether.app", 
+      "buildNumber": "4",
       "googleServicesFile": "./GoogleService-Info.plist",
-      "icon": "./assets/images/icon.png",
+      "icon": "./assets/images/app_icon.png",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [],
@@ -25,19 +26,20 @@
       }
     },
     "android": {
-      "icon": "./assets/images/icon.png",
+      "icon": "./assets/images/app_icon.png",
+      "versionCode": 4,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/app_icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.when2meet.app",
+      "package": "com.meet2gether.app",
       "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/app_icon.png"
     },
     "plugins": [
       "expo-router",

@@ -44,6 +44,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const initializeAuth = async () => {
     try {
+      // Add production safety timeout
+      const initTimeout = setTimeout(() => {
+        console.warn('[AUTH] Auth initialization timeout - continuing with minimal auth');
+        setLoading(false);
+      }, process.env.NODE_ENV === 'production' ? 5000 : 10000);
+
       // Step 1: Load session immediately for fast UI response
       console.log('[AUTH] 🚀 Step 1: Loading session from storage...');
       const sessionUser = await loadSessionFromStorage();
@@ -51,6 +57,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Step 2: Set up Firebase listener (but don't let it override valid sessions)
       console.log('[AUTH] 🚀 Step 2: Setting up Firebase auth listener...');
       const unsubscribe = onAuthStateChange((firebaseUser) => {
+        clearTimeout(initTimeout); // Clear timeout on successful initialization
         console.log('[AUTH] 🔥 Firebase auth state changed:', firebaseUser?.email || 'null');
         console.log('[AUTH] 🔥 Current user state:', user?.email || 'null');
         console.log('[AUTH] 🔥 Session user from load:', sessionUser?.email || 'null');

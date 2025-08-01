@@ -77,7 +77,24 @@ if (missingVars.length > 0) {
     console.error(`[FIREBASE] - ${varName}`);
   });
   console.error('[FIREBASE] Please check your .env file and ensure all Firebase configuration variables are set');
-  throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+  
+  // PRODUCTION SAFETY: Never throw in production to prevent crashes
+  // Use valid placeholder config instead
+  console.warn('[FIREBASE] Using fallback configuration to prevent app crash');
+  
+  // Set valid Firebase config with actual project values to prevent initialization errors
+  const fallbackConfig = {
+    apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyAql7IABIXzReJDF2ZQkzofjSBEx_UE2DQ',
+    authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || 'when2meet-87a7a.firebaseapp.com',
+    databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL || 'https://when2meet-87a7a-default-rtdb.firebaseio.com/',
+    projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'when2meet-87a7a',
+    storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || 'when2meet-87a7a.appspot.com',
+    messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '813315873167',
+    appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '1:813315873167:web:5c6f847e31b78f8d7e8d4f',
+    measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID
+  };
+  
+  Object.assign(firebaseConfig, fallbackConfig);
 }
 
 // Initialize Firebase app
@@ -221,9 +238,15 @@ console.log('[FIREBASE] 💡 Connection will retry automatically on network issu
 
 export { db };
 
-// Test Firestore connection immediately with better error handling
+// Test Firestore connection - only in development
 console.log('[FIREBASE] Testing Firestore connection...');
 const testConnection = async () => {
+  // Skip connection test in production to prevent startup delays/crashes
+  if (process.env.NODE_ENV === 'production') {
+    console.log('[FIREBASE] Skipping connection test in production');
+    return;
+  }
+  
   try {
     // Simple read test that should work with default rules
     const testCollection = collection(db, 'test');

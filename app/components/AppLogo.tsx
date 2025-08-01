@@ -32,7 +32,7 @@ export const AppLogo: React.FC<AppLogoProps> = ({
     return (
       <View style={containerStyle}>
         <Image
-          source={require('../assets/images/icon.png')}
+          source={require('../assets/images/app_icon.png')}
           style={[styles.image, logoStyle]}
           resizeMode="cover"
         />

@@ -64,6 +64,9 @@ export class FirebaseGroupService {
   // Subcollections (nested under groups)
   private static readonly MESSAGES_SUBCOLLECTION = 'messages';
   private static readonly ACTIVITIES_SUBCOLLECTION = 'activities';
+  
+  // Real-time subscription tracking for cleanup
+  private static activeSubscriptions: Map<string, () => void> = new Map();
 
   /**
    * Check if group name is unique in Firebase
@@ -699,16 +702,30 @@ export class FirebaseGroupService {
    * Save user availability to Firebase
    */
   static async saveAvailability(availability: Availability): Promise<void> {
-    console.log('[FIREBASE_GROUP] Saving availability for user:', availability.userId);
+    console.log('[FIREBASE_GROUP] 💾 Saving availability for user:', availability.userId, 'in group:', availability.groupId);
     
     try {
       const availabilityId = `${availability.groupId}_${availability.userId}`;
       const availabilityRef = doc(db, this.AVAILABILITY_COLLECTION, availabilityId);
       
-      await setDoc(availabilityRef, {
+      // Add UTC timestamp for accurate cross-timezone coordination
+      const utcTimestamp = new Date().toISOString();
+      const availabilityData = {
         ...availability.toJSON(),
-        updatedAt: serverTimestamp()
-      });
+        updatedAt: serverTimestamp(),
+        utcUpdatedAt: utcTimestamp,
+        // Ensure group and user IDs are preserved
+        groupId: availability.groupId,
+        userId: availability.userId
+      };
+      
+      // Atomic save to Firebase
+      await setDoc(availabilityRef, availabilityData);
+      
+      // Always save locally as backup (with same timestamp)
+      const localAvailability = availability.clone();
+      localAvailability.updatedAt = utcTimestamp;
+      await LocalStorage.saveAvailability(localAvailability);
       
       // Log activity as subcollection
       const activitiesRef = collection(db, this.GROUPS_COLLECTION, availability.groupId, this.ACTIVITIES_SUBCOLLECTION);
@@ -716,12 +733,22 @@ export class FirebaseGroupService {
         userId: availability.userId,
         userName: 'User',
         action: 'updated_availability',
-        timestamp: serverTimestamp()
+        timestamp: serverTimestamp(),
+        utcTimestamp: utcTimestamp
       });
       
-      console.log('[FIREBASE_GROUP] Availability saved successfully');
+      console.log('[FIREBASE_GROUP] ✅ Availability saved successfully (Firebase + Local)');
     } catch (error) {
-      console.error('[FIREBASE_GROUP] Error saving availability:', error);
+      console.error('[FIREBASE_GROUP] ❌ Error saving availability to Firebase:', error);
+      
+      // CRITICAL: Always save locally even if Firebase fails
+      try {
+        await LocalStorage.saveAvailability(availability);
+        console.log('[FIREBASE_GROUP] 💾 Availability saved to local storage as fallback');
+      } catch (localError) {
+        console.error('[FIREBASE_GROUP] ❌ CRITICAL: Both Firebase and local save failed:', localError);
+      }
+      
       throw error;
     }
   }
@@ -757,6 +784,216 @@ export class FirebaseGroupService {
       // Fallback to local storage
       return await LocalStorage.getGroupAvailabilities(groupId);
     }
+  }
+
+  /**
+   * Subscribe to real-time group availability updates
+   * CRITICAL: Maintains Firebase connection during group switches
+   */
+  static subscribeToGroupAvailabilities(
+    groupId: string,
+    onUpdate: (availabilities: Availability[]) => void,
+    onError?: (error: Error) => void
+  ): (() => void) {
+    console.log('[FIREBASE_GROUP] 🔄 Setting up real-time availability sync for group:', groupId);
+    
+    const availabilityQuery = query(
+      collection(db, this.AVAILABILITY_COLLECTION),
+      where('groupId', '==', groupId)
+    );
+    
+    const unsubscribe = onSnapshot(
+      availabilityQuery,
+      async (snapshot) => {
+        try {
+          console.log('[FIREBASE_GROUP] 📡 Real-time availability update:', snapshot.docs.length, 'availabilities');
+          
+          const availabilities = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return Availability.fromJSON(data as IAvailability);
+          });
+          
+          // Cache locally for offline access
+          for (const availability of availabilities) {
+            await LocalStorage.saveAvailability(availability);
+          }
+          
+          onUpdate(availabilities);
+        } catch (error) {
+          console.error('[FIREBASE_GROUP] Real-time availability update error:', error);
+          if (onError) {
+            onError(error as Error);
+          }
+        }
+      },
+      (error) => {
+        console.error('[FIREBASE_GROUP] Real-time availability subscription error:', error);
+        if (onError) {
+          onError(error);
+        }
+        // Fallback to local storage
+        LocalStorage.getGroupAvailabilities(groupId).then(onUpdate).catch(console.error);
+      }
+    );
+    
+    // Track subscription for cleanup
+    const subscriptionKey = `availability_${groupId}`;
+    this.activeSubscriptions.set(subscriptionKey, unsubscribe);
+    
+    return () => {
+      unsubscribe();
+      this.activeSubscriptions.delete(subscriptionKey);
+    };
+  }
+
+  /**
+   * Subscribe to specific user's availability across all groups
+   * CRITICAL: Preserves user's calendar data during group switches
+   */
+  static subscribeToUserAvailabilities(
+    userId: string,
+    onUpdate: (availabilities: Availability[]) => void,
+    onError?: (error: Error) => void
+  ): (() => void) {
+    console.log('[FIREBASE_GROUP] 🔄 Setting up user availability sync for:', userId);
+    
+    const userAvailabilityQuery = query(
+      collection(db, this.AVAILABILITY_COLLECTION),
+      where('userId', '==', userId)
+    );
+    
+    const unsubscribe = onSnapshot(
+      userAvailabilityQuery,
+      async (snapshot) => {
+        try {
+          console.log('[FIREBASE_GROUP] 📡 User availability update:', snapshot.docs.length, 'records');
+          
+          const availabilities = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return Availability.fromJSON(data as IAvailability);
+          });
+          
+          // Cache all user's availabilities locally
+          for (const availability of availabilities) {
+            await LocalStorage.saveAvailability(availability);
+          }
+          
+          onUpdate(availabilities);
+        } catch (error) {
+          console.error('[FIREBASE_GROUP] User availability update error:', error);
+          if (onError) {
+            onError(error as Error);
+          }
+        }
+      },
+      (error) => {
+        console.error('[FIREBASE_GROUP] User availability subscription error:', error);
+        if (onError) {
+          onError(error);
+        }
+      }
+    );
+    
+    // Track subscription for cleanup
+    const subscriptionKey = `user_availability_${userId}`;
+    this.activeSubscriptions.set(subscriptionKey, unsubscribe);
+    
+    return () => {
+      unsubscribe();
+      this.activeSubscriptions.delete(subscriptionKey);
+    };
+  }
+
+  /**
+   * Get user's availability for specific group with fallback
+   * CRITICAL: Ensures data persistence across group operations
+   */
+  static async getUserAvailabilityForGroup(
+    userId: string,
+    groupId: string
+  ): Promise<Availability | null> {
+    console.log('[FIREBASE_GROUP] Getting user availability:', { userId, groupId });
+    
+    try {
+      const availabilityId = `${groupId}_${userId}`;
+      const availabilityRef = doc(db, this.AVAILABILITY_COLLECTION, availabilityId);
+      const snapshot = await getDoc(availabilityRef);
+      
+      if (snapshot.exists()) {
+        const availability = Availability.fromJSON(snapshot.data() as IAvailability);
+        // Cache locally
+        await LocalStorage.saveAvailability(availability);
+        console.log('[FIREBASE_GROUP] ✅ Found user availability in Firebase');
+        return availability;
+      } else {
+        console.log('[FIREBASE_GROUP] ⚠️ No Firebase availability, checking local storage');
+        // Fallback to local storage
+        return await LocalStorage.getAvailability(userId, groupId);
+      }
+    } catch (error) {
+      console.error('[FIREBASE_GROUP] Error getting user availability:', error);
+      // Always fallback to local storage
+      return await LocalStorage.getAvailability(userId, groupId);
+    }
+  }
+
+  /**
+   * Cleanup subscription when switching groups
+   * CRITICAL: Prevents memory leaks and ensures clean group switches
+   */
+  static cleanupSubscription(subscriptionKey: string): void {
+    const unsubscribe = this.activeSubscriptions.get(subscriptionKey);
+    if (unsubscribe) {
+      console.log('[FIREBASE_GROUP] 🧹 Cleaning up subscription:', subscriptionKey);
+      unsubscribe();
+      this.activeSubscriptions.delete(subscriptionKey);
+    }
+  }
+
+  /**
+   * Cleanup all active subscriptions
+   * CRITICAL: Call when user logs out or app backgrounded
+   */
+  static cleanupAllSubscriptions(): void {
+    console.log('[FIREBASE_GROUP] 🧹 Cleaning up all subscriptions:', this.activeSubscriptions.size);
+    this.activeSubscriptions.forEach((unsubscribe, key) => {
+      console.log('[FIREBASE_GROUP] 🧹 Cleaning up:', key);
+      unsubscribe();
+    });
+    this.activeSubscriptions.clear();
+  }
+
+  /**
+   * Enhanced availability sync with retry logic
+   * CRITICAL: Ensures data persistence during network issues
+   */
+  static async syncAvailabilityWithRetry(
+    availability: Availability,
+    maxRetries: number = 3
+  ): Promise<void> {
+    let attempt = 0;
+    let lastError: Error | null = null;
+    
+    while (attempt < maxRetries) {
+      try {
+        console.log(`[FIREBASE_GROUP] 🔄 Sync attempt ${attempt + 1}/${maxRetries}`);
+        await this.saveAvailability(availability);
+        console.log('[FIREBASE_GROUP] ✅ Sync successful');
+        return;
+      } catch (error) {
+        lastError = error as Error;
+        attempt++;
+        
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
+          console.log(`[FIREBASE_GROUP] ⏳ Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    console.error('[FIREBASE_GROUP] ❌ All sync attempts failed:', lastError);
+    throw lastError;
   }
 
   /**

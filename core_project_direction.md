@@ -1,7 +1,7 @@
-# When2Meet - Core Project Direction
+# Meet2Gether - Core Project Direction
 
 **Last Updated: 2025-01-31 14:45:00 UTC**  
-**App Version: 1.0.0**  
+**App Version: 1.3.0**  
 **Framework: React Native + Expo**  
 **Theme: Counter-Strike 2 Tactical Design**
 
@@ -9,7 +9,7 @@
 
 ## PROJECT OVERVIEW
 
-When2Meet is a React Native mobile application built with Expo Framework for coordinating meeting times within groups. The app features a tactical Counter-Strike 2 inspired dark theme with orange/gold accents for a professional, gaming-aesthetic user experience.
+Meet2Gether is a React Native mobile application built with Expo Framework for coordinating meeting times within groups. The app features a tactical Counter-Strike 2 inspired dark theme with orange/gold accents for a professional, gaming-aesthetic user experience.
 
 ## SPECIALIZED DEVELOPMENT AGENTS
 
@@ -218,6 +218,30 @@ These agents should be used via the Task tool for specialized development tasks 
 ---
 
 ## RECENT CHANGES LOG
+
+### 2025-01-31 Session Updates:
+
+#### Firebase Real-Time Calendar Persistence Implementation (Latest):
+- **FIREBASE REAL-TIME SYNC:** Implemented comprehensive real-time availability synchronization
+- **GROUP SWITCHING SAFETY:** Calendar data now persists seamlessly across group operations
+- **TIMEZONE ACCURACY:** Added UTC-based date handling for consistent cross-timezone coordination
+- **SUBSCRIPTION MANAGEMENT:** Automatic cleanup of Firebase subscriptions during group switches
+- **RETRY LOGIC:** Enhanced availability sync with exponential backoff retry mechanism
+- **FOCUS REFRESH:** Added useFocusEffect to calendar screens for automatic data refresh
+- **DATA VALIDATION:** DateTimeUtils for consistent date/time handling across all operations
+- **DUAL PERSISTENCE:** Firebase-first with local storage fallback for offline reliability
+- **OPTIMISTIC UPDATES:** Immediate UI updates with background Firebase synchronization
+- **CONNECTION MONITORING:** Real-time subscription error handling with local fallbacks
+
+#### Calendar Data Architecture Improvements:
+- **REAL-TIME SUBSCRIPTIONS:** `subscribeToGroupAvailabilities()` and `subscribeToUserAvailabilities()`
+- **PERSISTENCE ACROSS GROUP SWITCHES:** User's calendar data maintained when switching between groups
+- **ENHANCED SYNC:** `syncAvailabilityWithRetry()` with 3-attempt retry logic and exponential backoff
+- **UTC DATE CONSISTENCY:** All date operations use UTC strings to prevent timezone-related data loss
+- **SUBSCRIPTION CLEANUP:** Automatic unsubscribe when changing groups or logging out
+- **FIREBASE + LOCAL BACKUP:** Atomic saves to both Firebase and LocalStorage for reliability
+- **FOCUS-BASED REFRESH:** Calendar data refreshes automatically when switching tabs
+- **CONNECTION STATE TRACKING:** Active subscription management prevents memory leaks
 
 ### 2025-01-28 Session Updates:
 

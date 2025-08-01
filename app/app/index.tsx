@@ -18,7 +18,17 @@ const IndexScreen: React.FC = () => {
     console.log('[INDEX] User email:', user?.email || 'none');
     console.log('[INDEX] ========================================');
     
+    // Add production timeout to prevent infinite loading
+    const redirectTimeout = setTimeout(() => {
+      if (!redirected) {
+        console.warn('[INDEX] Redirect timeout - forcing navigation');
+        setRedirected(true);
+        router.replace('/login');
+      }
+    }, process.env.NODE_ENV === 'production' ? 3000 : 5000);
+    
     if (!loading && !redirected) {
+      clearTimeout(redirectTimeout);
       setRedirected(true);
       
       if (user) {
@@ -29,6 +39,8 @@ const IndexScreen: React.FC = () => {
         router.replace('/login');
       }
     }
+    
+    return () => clearTimeout(redirectTimeout);
   }, [user, loading, router, redirected]);
 
   return (

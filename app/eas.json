@@ -1,39 +1,43 @@
 {
   "cli": {
-    "version": ">= 3.0.0",
-    "appVersionSource": "local"
+    "version": ">= 3.0.0"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "ios": {
-        "resourceClass": "m-medium"
-      },
-      "channel": "development"
+      "env": {
+        "NODE_ENV": "development",
+        "EXPO_PUBLIC_ENABLE_DEMO_AUTH": "true"
+      }
     },
     "preview": {
       "distribution": "internal",
-      "channel": "preview",
-      "ios": {
-        "resourceClass": "m-medium",
-        "simulator": false,
-        "buildConfiguration": "Release"
-      },
-      "env": {
-        "NODE_ENV": "production"
-      }
-    },
-    "production": {
-      "ios": {
-        "resourceClass": "m-medium",
-        "simulator": false,
-        "buildConfiguration": "Release"
-      },
-      "channel": "production",
       "env": {
         "NODE_ENV": "production",
         "EXPO_PUBLIC_ENABLE_DEMO_AUTH": "false"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "env": {
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_ENABLE_DEMO_AUTH": "false",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyAql7IABIXzReJDF2ZQkzofjSBEx_UE2DQ",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "when2meet-87a7a.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_DATABASE_URL": "https://when2meet-87a7a-default-rtdb.firebaseio.com/",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "when2meet-87a7a",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "when2meet-87a7a.appspot.com",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "813315873167",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:813315873167:web:5c6f847e31b78f8d7e8d4f",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "813315873167-hhph3ruc9e6aldb66ip06v0najd024ki.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "813315873167-hhph3ruc9e6aldb66ip06v0najd024ki.apps.googleusercontent.com"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
       }
     }
   },

@@ -37,7 +37,7 @@ const GroupSettingsScreen: React.FC = () => {
     if (currentGroup) {
       const memberData = currentGroup.members.map(id => ({
         id,
-        name: id === user?.id ? user.name : `Member ${id.slice(-4)}`
+        name: id === user?.id ? user.name : id.slice(-4)
       }));
       setMembers(memberData);
     }

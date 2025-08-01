@@ -10,6 +10,8 @@ import 'react-native-reanimated';
 import { AppProvider } from '../contexts/AppContext';
 import { AuthProvider } from '../contexts/AuthContext';
 import { ToastProvider } from '../components/Toast';
+import { ProductionErrorBoundary } from '../components/ProductionErrorBoundary';
+import { StartupSafetyService } from '../services/StartupSafetyService';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -30,18 +32,62 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
+  // Production-safe font loading with startup safety service
   useEffect(() => {
-    if (error) throw error;
+    const initializeAppSafely = async () => {
+      try {
+        console.log('[ROOT_LAYOUT] 🚀 Starting production-safe initialization...');
+        
+        // Initialize app services safely
+        await StartupSafetyService.initializeApp();
+        
+        // Handle font loading safely
+        if (error) {
+          console.error('[ROOT_LAYOUT] Font loading error:', error);
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('[ROOT_LAYOUT] Development mode: Font error will be thrown');
+          } else {
+            console.log('[ROOT_LAYOUT] 🛡️ Production mode: Continuing without custom fonts');
+          }
+        }
+        
+        // Always hide splash screen after initialization
+        setTimeout(() => {
+          SplashScreen.hideAsync().catch((splashError) => {
+            console.warn('[ROOT_LAYOUT] Splash screen hide failed:', splashError);
+          });
+        }, 1000);
+        
+      } catch (initError) {
+        console.error('[ROOT_LAYOUT] 🚨 App initialization failed:', initError);
+        
+        // In production, continue anyway
+        if (process.env.NODE_ENV === 'production') {
+          console.log('[ROOT_LAYOUT] 🛡️ Production mode: Continuing despite initialization errors');
+          SplashScreen.hideAsync().catch(console.error);
+        } else {
+          throw initError;
+        }
+      }
+    };
+    
+    initializeAppSafely();
   }, [error]);
 
+  // Production safety: Always render after timeout even if fonts not loaded
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
+    if (process.env.NODE_ENV === 'production') {
+      const productionTimeout = setTimeout(() => {
+        console.log('[ROOT_LAYOUT] 🛡️ Production timeout: Forcing app render');
+        SplashScreen.hideAsync().catch(console.error);
+      }, 3000);
+      
+      return () => clearTimeout(productionTimeout);
     }
-  }, [loaded]);
+  }, []);
 
-  if (!loaded) {
+  // In development, wait for fonts. In production, continue without blocking
+  if (!loaded && !error && process.env.NODE_ENV !== 'production') {
     return null;
   }
 
@@ -96,22 +142,24 @@ function RootLayoutNav() {
   };
 
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <AppProvider>
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="login" />
-              <Stack.Screen name="dateDetail" />
-              <Stack.Screen name="groupSettings" />
-              <Stack.Screen name="setAvailability" />
-              <Stack.Screen name="+not-found" options={{ title: 'Oops!' }} />
-            </Stack>
-          </ThemeProvider>
-        </AppProvider>
-      </AuthProvider>
-    </ToastProvider>
+    <ProductionErrorBoundary>
+      <ToastProvider>
+        <AuthProvider>
+          <AppProvider>
+            <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="login" />
+                <Stack.Screen name="dateDetail" />
+                <Stack.Screen name="groupSettings" />
+                <Stack.Screen name="setAvailability" />
+                <Stack.Screen name="+not-found" options={{ title: 'Oops!' }} />
+              </Stack>
+            </ThemeProvider>
+          </AppProvider>
+        </AuthProvider>
+      </ToastProvider>
+    </ProductionErrorBoundary>
   );
 }
 

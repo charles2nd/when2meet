@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useRef, useCallback } from 'react';
 import { User } from '../models/User';
 import { Group } from '../models/Group';
 import { Availability } from '../models/SimpleAvailability';
@@ -7,6 +7,7 @@ import { FirebaseGroupService } from '../services/FirebaseGroupService';
 import { translations, Language, TranslationKey } from '../services/translations';
 import { DemoDataService } from '../services/DemoDataService';
 import { useAuth } from './AuthContext';
+import NamePromptModal from '../components/NamePromptModal';
 
 interface AppContextType {
   // User
@@ -40,6 +41,11 @@ interface AppContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
   t: TranslationKey;
+  
+  // Name management
+  setUserName: (name: string) => Promise<void>;
+  showNamePrompt: boolean;
+  setShowNamePrompt: (show: boolean) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -48,6 +54,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const { user: authUser } = useAuth(); // Get user from AuthContext
   const [user, setUser] = useState<User | null>(null);
   const [currentGroup, setCurrentGroup] = useState<Group | null>(null);
+  
+  // Real-time Firebase subscription tracking
+  const groupAvailabilityUnsubscribe = useRef<(() => void) | null>(null);
+  const userAvailabilityUnsubscribe = useRef<(() => void) | null>(null);
   const [myAvailability, setMyAvailability] = useState<Availability | null>(null);
   const [groupAvailabilities, setGroupAvailabilities] = useState<Availability[]>([]);
   const [userGroups, setUserGroups] = useState<Group[]>([]);
@@ -55,6 +65,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [languageLoaded, setLanguageLoaded] = useState<boolean>(false);
   const [userSyncing, setUserSyncing] = useState<boolean>(false);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
 
   // Load saved language and initialize demo data on app start
   useEffect(() => {
@@ -110,6 +121,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           groupId: undefined, // Will be set after groups are loaded
           authMethod: authUser.authMethod || (authUser.phoneNumber ? 'phone' : authUser.email ? 'email' : 'google')
         });
+        
+        // Check if phone user needs name prompt
+        if (tempUser.authMethod === 'phone' && (!tempUser.name || tempUser.name === 'User' || tempUser.name.trim().length === 0)) {
+          console.log('[APP] 📱 Phone user needs name prompt');
+          setShowNamePrompt(true);
+        }
         
         // Update user data in Firebase to ensure consistency
         try {
@@ -484,7 +501,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Note: leaveGroup functionality temporarily disabled
 
   const saveAvailability = async (availability: Availability) => {
-    console.log('[APP] Saving availability with', availability.slots.length, 'total slots...');
+    console.log('[APP] 💾 Saving availability with', availability.slots.length, 'total slots...');
     console.log('[APP] Slots by date:', availability.slots.reduce((acc, slot) => {
       acc[slot.date] = (acc[slot.date] || 0) + (slot.available ? 1 : 0);
       return acc;
@@ -496,17 +513,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       Availability.fromJSON(availability);
     
     try {
-      // Try Firebase first
-      await FirebaseGroupService.saveAvailability(properAvailability);
-      console.log('[APP] Availability saved to Firebase');
+      // Use enhanced Firebase sync with retry logic
+      await FirebaseGroupService.syncAvailabilityWithRetry(properAvailability, 3);
+      console.log('[APP] ✅ Availability synced to Firebase with retry protection');
+      
+      // Update my availability state immediately (optimistic update)
+      setMyAvailability(properAvailability);
+      console.log('[APP] Availability saved successfully - new availability has', properAvailability.slots.length, 'slots');
+      
     } catch (error) {
-      console.error('[APP] Firebase availability save failed, using local:', error);
+      console.error('[APP] ❌ Firebase sync failed after retries:', error);
+      // Still update local state even if Firebase fails
+      setMyAvailability(properAvailability);
+      throw error; // Let caller handle the error
     }
-    
-    // Always save locally as backup
-    await LocalStorage.saveAvailability(properAvailability);
-    setMyAvailability(properAvailability);
-    console.log('[APP] Availability saved successfully - new availability has', properAvailability.slots.length, 'slots');
   };
 
   const loadGroupAvailabilities = async () => {
@@ -616,6 +636,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const stableUpdateLanguage = useMemo(() => updateLanguage, []);
   const stableLogout = useMemo(() => logout, []);
   
+  // Set user name function for first-time phone users
+  const setUserName = useCallback(async (name: string) => {
+    if (!user) return;
+    
+    console.log('[APP] 📝 Setting user name:', name);
+    
+    try {
+      const updatedUser = new User({
+        ...user.toJSON(),
+        name: name.trim() || user.phoneNumber || 'User'
+      });
+      
+      setUser(updatedUser);
+      await LocalStorage.saveUser(updatedUser);
+      
+      // Also update in Firebase
+      try {
+        await FirebaseGroupService.updateUserData(updatedUser);
+        console.log('[APP] ✅ User name updated in Firebase');
+      } catch (firebaseError) {
+        console.warn('[APP] ⚠️ Firebase update failed, continuing with local update:', firebaseError);
+      }
+      
+      setShowNamePrompt(false);
+      console.log('[APP] ✅ User name updated successfully');
+    } catch (error) {
+      console.error('[APP] ❌ Error updating user name:', error);
+      throw error;
+    }
+  }, [user]);
+  
+  const stableSetUserName = useMemo(() => setUserName, [setUserName]);
+  
   // Stabilize translation function
   const stableT = useMemo(() => {
     return translations[language] || translations.en;
@@ -638,9 +691,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     saveAvailability: stableSaveAvailability,
     loadGroupAvailabilities: stableLoadGroupAvailabilities,
     loadUserGroups: stableLoadUserGroups,
+    setUserName: stableSetUserName,
     language,
     setLanguage: stableUpdateLanguage,
-    t: stableT
+    t: stableT,
+    showNamePrompt,
+    setShowNamePrompt
   }), [
     user,
     currentGroup,
@@ -658,10 +714,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     stableLoadUserGroups,
     language,
     stableUpdateLanguage,
-    stableT
+    stableT,
+    stableSetUserName,
+    showNamePrompt
   ]);
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return (
+    <AppContext.Provider value={value}>
+      {children}
+      <NamePromptModal
+        visible={showNamePrompt}
+        onNameSet={setUserName}
+      />
+    </AppContext.Provider>
+  );
 };
 
 export const useApp = () => {

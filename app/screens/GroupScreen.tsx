@@ -635,14 +635,12 @@ const GroupScreen: React.FC = () => {
             colors={[Colors.primary, Colors.primaryDark]}
             centered={false}
           >
-            <View style={styles.headerContent}>
-              <TouchableOpacity 
-                style={styles.headerButton}
-                onPress={openGroupModal}
-              >
-                <Ionicons name="add" size={24} color={Colors.text.primary} />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity 
+              style={styles.compactHeaderButton}
+              onPress={openGroupModal}
+            >
+              <Ionicons name="add" size={20} color={Colors.text.primary} />
+            </TouchableOpacity>
           </SafeHeader>
 
           {renderGroupModal()}
@@ -721,14 +719,12 @@ const GroupScreen: React.FC = () => {
           colors={[Colors.primary, Colors.primaryDark]}
           centered={false}
         >
-          <View style={styles.headerContent}>
-            <TouchableOpacity 
-              style={styles.headerButton}
-              onPress={openGroupModal}
-            >
-              <Ionicons name="add" size={24} color={Colors.text.primary} />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity 
+            style={styles.compactHeaderButton}
+            onPress={openGroupModal}
+          >
+            <Ionicons name="add" size={20} color={Colors.text.primary} />
+          </TouchableOpacity>
         </SafeHeader>
 
         {renderGroupModal()}
@@ -1334,33 +1330,16 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.8)',
     fontWeight: Typography.weights.medium,
   },
-  // Header with button styles
-  headerWithButton: {
-    paddingHorizontal: Spacing.lg,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  headerText: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  headerButton: {
-    position: 'absolute',
-    right: 0,
-    top: '50%',
-    transform: [{ translateY: -12 }],
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  // Compact header button
+  compactHeaderButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   // Group list styles (for when user has groups but no current group)
   groupItem: {

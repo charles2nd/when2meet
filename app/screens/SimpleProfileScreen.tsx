@@ -90,6 +90,8 @@ const SimpleProfileScreen: React.FC = () => {
           id: user.id,
           name: user.name,
           email: user.email,
+          phoneNumber: user.phoneNumber,
+          authMethod: user.authMethod,
           language: user.language,
           groupId: group.id
         });

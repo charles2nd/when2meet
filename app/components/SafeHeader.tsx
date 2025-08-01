@@ -29,22 +29,31 @@ export const SafeHeader: React.FC<SafeHeaderProps> = ({
         style={[
           styles.header,
           {
-            paddingTop: Math.max(insets.top + Spacing.xxl, 85), // Increased padding for lower title positioning
+            paddingTop: Math.max(insets.top + Spacing.md, 60),
           },
           centered && styles.headerCentered
         ]}
       >
         <View style={styles.content}>
-          {!centered && children && (
-            <View style={styles.headerActions}>
+          {!centered ? (
+            <View style={styles.compactHeader}>
+              <View style={styles.titleContainer}>
+                <Text style={styles.title}>{title}</Text>
+                {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+              </View>
+              {children && (
+                <View style={styles.headerActions}>
+                  {children}
+                </View>
+              )}
+            </View>
+          ) : (
+            <View style={styles.textCentered}>
               {children}
+              <Text style={styles.title}>{title}</Text>
+              {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
             </View>
           )}
-          <View style={centered ? styles.textCentered : styles.textLeft}>
-            {centered && children}
-            <Text style={styles.title}>{title}</Text>
-            {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
-          </View>
         </View>
       </LinearGradient>
     </>
@@ -53,7 +62,7 @@ export const SafeHeader: React.FC<SafeHeaderProps> = ({
 
 const styles = StyleSheet.create({
   header: {
-    paddingBottom: Spacing.xxl, // Extra spacing for better visual hierarchy
+    paddingBottom: Spacing.lg,
     paddingHorizontal: Spacing.lg,
   },
   headerCentered: {
@@ -63,11 +72,20 @@ const styles = StyleSheet.create({
     width: '100%',
     position: 'relative',
   },
+  compactHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  titleContainer: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
   headerActions: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    zIndex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
   textCentered: {
     alignItems: 'center',
@@ -76,16 +94,16 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   title: {
-    fontSize: Typography.sizes.xxl,
+    fontSize: Typography.sizes.xl,
     fontWeight: Typography.weights.bold,
     color: Colors.text.primary,
-    marginBottom: Spacing.xs,
-    letterSpacing: 2,
-    textAlign: 'center',
+    letterSpacing: 1,
+    textAlign: 'left',
   },
   subtitle: {
-    fontSize: Typography.sizes.md,
-    color: 'rgba(255, 255, 255, 0.9)',
-    textAlign: 'center',
+    fontSize: Typography.sizes.sm,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'left',
+    marginTop: Spacing.xs,
   },
 });
